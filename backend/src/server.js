@@ -27,8 +27,10 @@ app.get('/health', (_, res) => res.json({ ok: true }))
 
 require('./socket')(io)
 
-httpServer.listen(config.PORT, () =>
-  console.log(`Server running on port ${config.PORT}`)
-)
+if (require.main === module) {
+  httpServer.listen(config.PORT, () =>
+    console.log(`Server running on port ${config.PORT}`)
+  )
+}
 
-module.exports = { app, io }
+module.exports = { app, io, httpServer }
