@@ -13,3 +13,7 @@ CREATE TABLE IF NOT EXISTS game_records (
   duration_sec  INTEGER,
   played_at     TIMESTAMP DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_game_records_player1 ON game_records(player1_id);
+CREATE INDEX IF NOT EXISTS idx_game_records_player2 ON game_records(player2_id);
+CREATE INDEX IF NOT EXISTS idx_game_records_room    ON game_records(room_id);
