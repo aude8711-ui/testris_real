@@ -9,7 +9,9 @@
     "test": "jest --runInBand",
     "migrate": "node src/db/migrate.js"
   },
-  "jest": { "testEnvironment": "node" },
+  "jest": {
+    "testEnvironment": "node"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -23,7 +25,8 @@
     "express-rate-limit": "^8.4.1",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "jest": "^30.3.0",
