@@ -3,16 +3,16 @@ import { useEffect, useRef } from 'react'
 import { PIECE_COLORS, PIECES } from '@/lib/tetris/pieces'
 import type { GameState } from '@/lib/tetris/engine'
 
-const CELL = 32
-const COLS = 10
-const ROWS = 20
-
 interface Props {
   state: GameState
   ghostRow: number
+  cellSize?: number
 }
 
-export function GameBoard({ state, ghostRow }: Props) {
+const COLS = 10
+const ROWS = 20
+
+export function GameBoard({ state, ghostRow, cellSize = 32 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -27,16 +27,14 @@ export function GameBoard({ state, ghostRow }: Props) {
     ctx.lineWidth = 0.5
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
-        ctx.strokeRect(c * CELL, (ROWS - 1 - r) * CELL, CELL, CELL)
+        ctx.strokeRect(c * cellSize, (ROWS - 1 - r) * cellSize, cellSize, cellSize)
       }
     }
 
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const cell = state.board[r][c]
-        if (cell) {
-          drawMino(ctx, c, ROWS - 1 - r, PIECE_COLORS[cell])
-        }
+        if (cell) drawMino(ctx, c, ROWS - 1 - r, PIECE_COLORS[cell], cellSize)
       }
     }
 
@@ -44,31 +42,30 @@ export function GameBoard({ state, ghostRow }: Props) {
       const minos = PIECES[state.active.type][state.active.rotation]
       ctx.globalAlpha = 0.25
       for (const [dr, dc] of minos) {
-        drawMino(ctx, state.active.col + dc, ROWS - 1 - (ghostRow + dr), PIECE_COLORS[state.active.type])
+        drawMino(ctx, state.active.col + dc, ROWS - 1 - (ghostRow + dr), PIECE_COLORS[state.active.type], cellSize)
       }
       ctx.globalAlpha = 1
-
       for (const [dr, dc] of minos) {
-        drawMino(ctx, state.active.col + dc, ROWS - 1 - (state.active.row + dr), PIECE_COLORS[state.active.type])
+        drawMino(ctx, state.active.col + dc, ROWS - 1 - (state.active.row + dr), PIECE_COLORS[state.active.type], cellSize)
       }
     }
-  }, [state, ghostRow])
+  }, [state, ghostRow, cellSize])
 
   return (
     <canvas
       ref={canvasRef}
-      width={COLS * CELL}
-      height={ROWS * CELL}
+      width={COLS * cellSize}
+      height={ROWS * cellSize}
       className="border border-white/10"
     />
   )
 }
 
-function drawMino(ctx: CanvasRenderingContext2D, col: number, row: number, color: string) {
-  const x = col * CELL
-  const y = row * CELL
+function drawMino(ctx: CanvasRenderingContext2D, col: number, row: number, color: string, cell: number) {
+  const x = col * cell
+  const y = row * cell
   ctx.fillStyle = color
-  ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2)
+  ctx.fillRect(x + 1, y + 1, cell - 2, cell - 2)
   ctx.fillStyle = 'rgba(255,255,255,0.15)'
-  ctx.fillRect(x + 1, y + 1, CELL - 2, 4)
+  ctx.fillRect(x + 1, y + 1, cell - 2, 4)
 }
