@@ -20,47 +20,47 @@ const CC_TO_ACTION: Record<string, string> = {
   'Hold':                     'hold',
 }
 
-// --- Piece mino data (row offset, col offset) for each rotation ---
+// --- Piece mino data (row offset, col offset) — must match engine's PIECES exactly ---
 const MINOS: Record<PieceChar, [number, number][][]> = {
   I: [
-    [[0,0],[0,1],[0,2],[0,3]],
-    [[0,0],[1,0],[2,0],[3,0]],
-    [[0,0],[0,1],[0,2],[0,3]],
-    [[0,0],[1,0],[2,0],[3,0]],
+    [[1,0],[1,1],[1,2],[1,3]],
+    [[0,2],[1,2],[2,2],[3,2]],
+    [[2,0],[2,1],[2,2],[2,3]],
+    [[0,1],[1,1],[2,1],[3,1]],
   ],
   O: [
-    [[0,0],[0,1],[1,0],[1,1]],
-    [[0,0],[0,1],[1,0],[1,1]],
-    [[0,0],[0,1],[1,0],[1,1]],
-    [[0,0],[0,1],[1,0],[1,1]],
+    [[0,1],[0,2],[1,1],[1,2]],
+    [[0,1],[0,2],[1,1],[1,2]],
+    [[0,1],[0,2],[1,1],[1,2]],
+    [[0,1],[0,2],[1,1],[1,2]],
   ],
   T: [
     [[0,1],[1,0],[1,1],[1,2]],
-    [[0,0],[1,0],[1,1],[2,0]],
+    [[0,1],[1,1],[1,2],[2,1]],
     [[1,0],[1,1],[1,2],[2,1]],
     [[0,1],[1,0],[1,1],[2,1]],
   ],
   S: [
     [[0,1],[0,2],[1,0],[1,1]],
-    [[0,0],[1,0],[1,1],[2,1]],
-    [[0,1],[0,2],[1,0],[1,1]],
+    [[0,1],[1,1],[1,2],[2,2]],
+    [[1,1],[1,2],[2,0],[2,1]],
     [[0,0],[1,0],[1,1],[2,1]],
   ],
   Z: [
     [[0,0],[0,1],[1,1],[1,2]],
-    [[0,1],[1,0],[1,1],[2,0]],
-    [[0,0],[0,1],[1,1],[1,2]],
+    [[0,2],[1,1],[1,2],[2,1]],
+    [[1,0],[1,1],[2,1],[2,2]],
     [[0,1],[1,0],[1,1],[2,0]],
   ],
   J: [
     [[0,0],[1,0],[1,1],[1,2]],
-    [[0,0],[0,1],[1,0],[2,0]],
+    [[0,1],[0,2],[1,1],[2,1]],
     [[1,0],[1,1],[1,2],[2,2]],
     [[0,1],[1,1],[2,0],[2,1]],
   ],
   L: [
     [[0,2],[1,0],[1,1],[1,2]],
-    [[0,0],[1,0],[2,0],[2,1]],
+    [[0,1],[1,1],[2,1],[2,2]],
     [[1,0],[1,1],[1,2],[2,0]],
     [[0,0],[0,1],[1,1],[2,1]],
   ],
@@ -97,10 +97,8 @@ function place(board: Board, minos: [number, number][], row: number, col: number
     const r = row + dr, c = col + dc
     if (r >= 0 && r < ROWS && c >= 0 && c < COLS) b[r][c] = 1
   }
-  // clear full rows
-  const cleared = b.filter(r => r.every(c => c !== 0))
-  const kept    = b.filter(r => !r.every(c => c !== 0))
-  while (kept.length < ROWS) kept.unshift(Array(COLS).fill(0))
+  const kept = b.filter(r => !r.every(c => c !== 0))
+  while (kept.length < ROWS) kept.push(Array(COLS).fill(0))
   return kept
 }
 
@@ -108,17 +106,15 @@ function score(board: Board): number {
   let holes = 0, bumpiness = 0, maxHeight = 0
   const heights: number[] = Array(COLS).fill(0)
   for (let c = 0; c < COLS; c++) {
-    let h = 0
     for (let r = ROWS - 1; r >= 0; r--) {
-      if (board[r][c]) { h = ROWS - r; break }
+      if (board[r][c]) { heights[c] = r + 1; break }
     }
-    heights[c] = h
-    if (h > maxHeight) maxHeight = h
+    if (heights[c] > maxHeight) maxHeight = heights[c]
   }
   for (let c = 0; c < COLS; c++) {
     if (c > 0) bumpiness += Math.abs(heights[c] - heights[c - 1])
-    for (let r = ROWS - heights[c]; r < ROWS - 1; r++) {
-      if (!board[r][c] && board[r + 1][c]) holes++
+    for (let r = 0; r < heights[c] - 1; r++) {
+      if (!board[r][c]) holes++
     }
   }
   return -0.51 * maxHeight - 0.36 * holes - 0.18 * bumpiness
