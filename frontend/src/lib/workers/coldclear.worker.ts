@@ -199,25 +199,40 @@ function bestMove(board: Board, type: PieceChar): { col: number; rot: number } {
   let best = -Infinity, bestCol = 0, bestRot = 0
   for (let rot = 0; rot < rotations; rot++) {
     const minos = MINOS[type]?.[rot] ?? []
+    const dcVals = minos.map(([, dc]) => dc)
+    const pieceCenter = (Math.min(...dcVals) + Math.max(...dcVals)) / 2
     for (let col = -2; col < COLS + 2; col++) {
       const row = drop(board, minos, col)
       if (!fits(board, minos, row, col)) continue
       const r = place(board, minos, row, col)
-      const s = elTetris(r.board, r.landingRow, r.linesCleared, r.erasedCells)
+      // tiny center-bias tiebreaker — prevents degenerate left-wall preference
+      const centerBias = -0.005 * Math.abs(col + pieceCenter - (COLS - 1) / 2)
+      const s = elTetris(r.board, r.landingRow, r.linesCleared, r.erasedCells) + centerBias
       if (s > best) { best = s; bestCol = col; bestRot = rot }
     }
   }
   return { col: bestCol, rot: bestRot }
 }
 
-function movesToPlace(targetRot: number, targetCol: number): string[] {
+// At spawn (row=17, col=3), SRS kick shifts I-piece vertical rotations:
+//   rot=1 (CW):  kick [+1,-2] → actual col = 4
+//   rot=3 (CCW): kick [-1,-2] → actual col = 2
+// All other pieces / rotations: no kick at spawn, col stays 3.
+function spawnColAfterRotation(type: PieceChar, rot: number): number {
+  if (type !== 'I') return 3
+  if (rot === 1) return 4
+  if (rot === 3) return 2
+  return 3
+}
+
+function movesToPlace(type: PieceChar, targetRot: number, targetCol: number): string[] {
   const actions: string[] = []
   const rotDiff = (targetRot + 4) % 4
   if (rotDiff === 1) actions.push('rotate_cw')
   else if (rotDiff === 2) actions.push('rotate_180')
   else if (rotDiff === 3) actions.push('rotate_ccw')
 
-  const dc = targetCol - 3  // spawn col is always 3
+  const dc = targetCol - spawnColAfterRotation(type, targetRot)
   for (let i = 0; i < Math.abs(dc); i++) {
     actions.push(dc > 0 ? 'move_right' : 'move_left')
   }
@@ -269,7 +284,7 @@ self.addEventListener('message', async (e: MessageEvent<InMsg>) => {
       }
       // El-Tetris fallback
       const { col, rot } = bestMove(jsBoard, currentPiece)
-      const actions = movesToPlace(rot, col)
+      const actions = movesToPlace(currentPiece, rot, col)
       const minos = MINOS[currentPiece]?.[rot] ?? []
       const row = drop(jsBoard, minos, col)
       if (fits(jsBoard, minos, row, col)) {
