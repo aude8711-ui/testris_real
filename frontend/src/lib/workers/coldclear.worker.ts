@@ -1,5 +1,5 @@
 // ColdClear WASM Web Worker
-// Tries to load ColdClear WASM; falls back to a JS heuristic bot.
+// Tries to load ColdClear WASM; falls back to El-Tetris (Dellacherie) bot.
 
 type PieceChar = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L' | 'G'
 
@@ -20,7 +20,7 @@ const CC_TO_ACTION: Record<string, string> = {
   'Hold':                     'hold',
 }
 
-// --- Piece mino data (row offset, col offset) — must match engine's PIECES exactly ---
+// Mino data must match engine PIECES exactly
 const MINOS: Record<PieceChar, [number, number][][]> = {
   I: [
     [[1,0],[1,1],[1,2],[1,3]],
@@ -70,7 +70,7 @@ const MINOS: Record<PieceChar, [number, number][][]> = {
 const COLS = 10
 const ROWS = 20
 
-type Board = number[][]  // 0=empty, 1=filled; row 0=bottom
+type Board = number[][]  // row 0 = bottom, row 19 = top
 
 function emptyBoard(): Board {
   return Array.from({ length: ROWS }, () => Array(COLS).fill(0))
@@ -91,33 +91,107 @@ function drop(board: Board, minos: [number, number][], col: number): number {
   return row + 1
 }
 
-function place(board: Board, minos: [number, number][], row: number, col: number): Board {
-  const b = board.map(r => [...r])
-  for (const [dr, dc] of minos) {
-    const r = row + dr, c = col + dc
-    if (r >= 0 && r < ROWS && c >= 0 && c < COLS) b[r][c] = 1
-  }
-  const kept = b.filter(r => !r.every(c => c !== 0))
-  while (kept.length < ROWS) kept.push(Array(COLS).fill(0))
-  return kept
+interface PlaceResult {
+  board: Board
+  linesCleared: number
+  erasedCells: number  // minos of placed piece that were in cleared rows
+  landingRow: number   // highest row index among placed minos (before clearing)
 }
 
-function score(board: Board): number {
-  let holes = 0, bumpiness = 0, maxHeight = 0
-  const heights: number[] = Array(COLS).fill(0)
+function place(board: Board, minos: [number, number][], row: number, col: number): PlaceResult {
+  const b = board.map(r => [...r])
+  let landingRow = 0
+
+  for (const [dr, dc] of minos) {
+    const r = row + dr, c = col + dc
+    if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+      b[r][c] = 1
+      if (r > landingRow) landingRow = r
+    }
+  }
+
+  const fullRows = new Set<number>()
+  for (let r = 0; r < ROWS; r++) {
+    if (b[r].every(c => c !== 0)) fullRows.add(r)
+  }
+
+  let erasedCells = 0
+  for (const [dr] of minos) {
+    if (fullRows.has(row + dr)) erasedCells++
+  }
+
+  const kept = b.filter((_, r) => !fullRows.has(r))
+  while (kept.length < ROWS) kept.push(Array(COLS).fill(0))
+
+  return { board: kept, linesCleared: fullRows.size, erasedCells, landingRow }
+}
+
+// El-Tetris evaluation — Dellacherie weights
+// See: Thiery & Scherrer, "Improvements on Learning Tetris with Cross Entropy" (2009)
+function elTetris(board: Board, landingRow: number, linesCleared: number, erasedCells: number): number {
+  const landingHeight = landingRow + 1           // 1-based height from floor
+  const erodedPieces  = linesCleared * erasedCells
+
+  // Row transitions: horizontal filled↔empty changes (walls count as filled)
+  let rowTrans = 0
+  for (let r = 0; r < ROWS; r++) {
+    let prev = 1
+    for (let c = 0; c < COLS; c++) {
+      const cur = board[r][c] ? 1 : 0
+      if (cur !== prev) rowTrans++
+      prev = cur
+    }
+    if (prev === 0) rowTrans++  // right wall
+  }
+
+  // Column transitions: vertical filled↔empty changes (floor counts as filled)
+  let colTrans = 0
   for (let c = 0; c < COLS; c++) {
+    let prev = 1  // floor
+    for (let r = 0; r < ROWS; r++) {
+      const cur = board[r][c] ? 1 : 0
+      if (cur !== prev) colTrans++
+      prev = cur
+    }
+  }
+
+  // Buried holes: empty cells with ≥1 filled cell above
+  let holes = 0
+  for (let c = 0; c < COLS; c++) {
+    let hasFilledAbove = false
     for (let r = ROWS - 1; r >= 0; r--) {
-      if (board[r][c]) { heights[c] = r + 1; break }
+      if (board[r][c]) {
+        hasFilledAbove = true
+      } else if (hasFilledAbove) {
+        holes++
+      }
     }
-    if (heights[c] > maxHeight) maxHeight = heights[c]
   }
+
+  // Well sums: consecutive empty cells flanked by filled/wall on both sides
+  // Cumulative depth penalizes deeper wells more (1+2+3+... per well)
+  let wells = 0
   for (let c = 0; c < COLS; c++) {
-    if (c > 0) bumpiness += Math.abs(heights[c] - heights[c - 1])
-    for (let r = 0; r < heights[c] - 1; r++) {
-      if (!board[r][c]) holes++
+    let depth = 0
+    for (let r = ROWS - 1; r >= 0; r--) {
+      const leftFilled  = c === 0       || board[r][c - 1] !== 0
+      const rightFilled = c === COLS - 1 || board[r][c + 1] !== 0
+      if (!board[r][c] && leftFilled && rightFilled) {
+        wells += ++depth
+      } else {
+        depth = 0
+      }
     }
   }
-  return -0.51 * maxHeight - 0.36 * holes - 0.18 * bumpiness
+
+  return (
+    -4.500158825082766  * landingHeight +
+     3.4181268101392694 * erodedPieces  +
+    -3.2178882868487753 * rowTrans      +
+    -9.348695305445199  * colTrans      +
+    -7.899265427351652  * holes         +
+    -3.3855972247263626 * wells
+  )
 }
 
 function bestMove(board: Board, type: PieceChar): { col: number; rot: number } {
@@ -125,30 +199,25 @@ function bestMove(board: Board, type: PieceChar): { col: number; rot: number } {
   let best = -Infinity, bestCol = 0, bestRot = 0
   for (let rot = 0; rot < rotations; rot++) {
     const minos = MINOS[type]?.[rot] ?? []
-    const dcVals = minos.map(([, dc]) => dc)
-    const pieceCenter = (Math.min(...dcVals) + Math.max(...dcVals)) / 2
     for (let col = -2; col < COLS + 2; col++) {
       const row = drop(board, minos, col)
       if (!fits(board, minos, row, col)) continue
-      const b2 = place(board, minos, row, col)
-      // small center-bias tiebreaker so bot doesn't always pile on the left
-      const s = score(b2) - 0.005 * Math.abs(col + pieceCenter - (COLS - 1) / 2)
+      const r = place(board, minos, row, col)
+      const s = elTetris(r.board, r.landingRow, r.linesCleared, r.erasedCells)
       if (s > best) { best = s; bestCol = col; bestRot = rot }
     }
   }
   return { col: bestCol, rot: bestRot }
 }
 
-function movesToPlace(currentRot: number, targetRot: number, currentCol: number, targetCol: number): string[] {
+function movesToPlace(targetRot: number, targetCol: number): string[] {
   const actions: string[] = []
-  let rot = currentRot
-  const rotDiff = ((targetRot - rot) % 4 + 4) % 4
+  const rotDiff = (targetRot + 4) % 4
   if (rotDiff === 1) actions.push('rotate_cw')
   else if (rotDiff === 2) actions.push('rotate_180')
   else if (rotDiff === 3) actions.push('rotate_ccw')
-  rot = targetRot
 
-  const dc = targetCol - currentCol
+  const dc = targetCol - 3  // spawn col is always 3
   for (let i = 0; i < Math.abs(dc); i++) {
     actions.push(dc > 0 ? 'move_right' : 'move_left')
   }
@@ -156,12 +225,8 @@ function movesToPlace(currentRot: number, targetRot: number, currentCol: number,
   return actions
 }
 
-// --- State ---
 let jsBoard: Board = emptyBoard()
 let currentPiece: PieceChar = 'I'
-let pendingActions: string[] = []
-
-// WASM bot (optional)
 let wasmBot: any = null
 
 async function tryLoadWasm(piece: PieceChar, next: PieceChar[]) {
@@ -172,7 +237,6 @@ async function tryLoadWasm(piece: PieceChar, next: PieceChar[]) {
     wasmBot = mod.BotHandle.create({}, piece, next)
     self.postMessage({ type: 'ready' })
   } catch {
-    // WASM not available — use JS bot
     wasmBot = null
     self.postMessage({ type: 'ready' })
   }
@@ -186,7 +250,6 @@ self.addEventListener('message', async (e: MessageEvent<InMsg>) => {
         ? msg.board.map(row => row.map(c => (c ? 1 : 0)))
         : emptyBoard()
       currentPiece = msg.piece
-      pendingActions = []
       await tryLoadWasm(msg.piece, msg.next)
       break
 
@@ -204,14 +267,13 @@ self.addEventListener('message', async (e: MessageEvent<InMsg>) => {
           break
         }
       }
-      // JS fallback bot
+      // El-Tetris fallback
       const { col, rot } = bestMove(jsBoard, currentPiece)
-      const actions = movesToPlace(0, rot, 3, col)
-      // update internal board
+      const actions = movesToPlace(rot, col)
       const minos = MINOS[currentPiece]?.[rot] ?? []
       const row = drop(jsBoard, minos, col)
       if (fits(jsBoard, minos, row, col)) {
-        jsBoard = place(jsBoard, minos, row, col)
+        jsBoard = place(jsBoard, minos, row, col).board
       }
       self.postMessage({ type: 'move', actions, hold: false })
       break
@@ -220,7 +282,6 @@ self.addEventListener('message', async (e: MessageEvent<InMsg>) => {
     case 'reset':
       jsBoard = emptyBoard()
       currentPiece = msg.piece
-      pendingActions = []
       wasmBot = null
       await tryLoadWasm(msg.piece, msg.next)
       break
