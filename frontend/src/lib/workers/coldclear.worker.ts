@@ -125,11 +125,14 @@ function bestMove(board: Board, type: PieceChar): { col: number; rot: number } {
   let best = -Infinity, bestCol = 0, bestRot = 0
   for (let rot = 0; rot < rotations; rot++) {
     const minos = MINOS[type]?.[rot] ?? []
+    const dcVals = minos.map(([, dc]) => dc)
+    const pieceCenter = (Math.min(...dcVals) + Math.max(...dcVals)) / 2
     for (let col = -2; col < COLS + 2; col++) {
       const row = drop(board, minos, col)
       if (!fits(board, minos, row, col)) continue
       const b2 = place(board, minos, row, col)
-      const s = score(b2)
+      // small center-bias tiebreaker so bot doesn't always pile on the left
+      const s = score(b2) - 0.005 * Math.abs(col + pieceCenter - (COLS - 1) / 2)
       if (s > best) { best = s; bestCol = col; bestRot = rot }
     }
   }

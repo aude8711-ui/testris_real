@@ -56,7 +56,11 @@ export default function GamePage() {
     const handler = (e: KeyboardEvent) => {
       const eng = engineRef.current
       if (!eng || eng.state.topOut) return
-      const action = resolveAction(e.code, bindings.current)
+      let action = resolveAction(e.code, bindings.current)
+      // Ctrl = rotate_ccw (Tetris Guideline standard alternative)
+      if (!action && (e.code === 'ControlLeft' || e.code === 'ControlRight')) {
+        action = 'rotate_ccw'
+      }
       if (!action) return
       e.preventDefault()
       applyAction(eng, action)
@@ -69,6 +73,7 @@ export default function GamePage() {
 
   const eng = engineRef.current
   const running = phase === 'playing' && !gameOver && !won
+  const isOver = gameOver || won
 
   // Config screen
   if (phase === 'config') {
@@ -76,7 +81,7 @@ export default function GamePage() {
       <main className="min-h-screen flex flex-col items-center justify-center gap-8 text-white">
         <h1 className="text-3xl font-bold">vs AI</h1>
         <div className="flex flex-col items-center gap-3">
-          <p className="text-white/50 text-sm">Number of bots</p>
+          <p className="text-white/50 text-sm">봇 수</p>
           <div className="flex gap-3">
             {([1, 2, 3] as const).map(n => (
               <button
@@ -97,37 +102,26 @@ export default function GamePage() {
           onClick={startGame}
           className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-lg font-semibold"
         >
-          Start
+          시작
         </button>
+        <div className="text-white/30 text-xs text-center leading-relaxed">
+          ← → 이동 · ↑ 회전 · ↓ 소프트드롭 · Space 하드드롭<br />
+          Z 반시계 회전 · Ctrl 반시계 회전 · C 홀드
+        </div>
       </main>
     )
   }
 
   // Game screen
   return (
-    <div className="min-h-screen bg-[#0d0d0f] flex items-center justify-center text-white">
+    <div className="relative min-h-screen bg-[#0d0d0f] flex items-center justify-center text-white">
       <div className="flex gap-8 items-start">
         {/* Player panel */}
         <div className="flex gap-3 items-start">
           {eng && <HoldPiece type={eng.state.hold} used={eng.state.holdUsed} />}
           <div className="flex flex-col items-center gap-2">
-            <div className="text-sm text-white/40">You · Lines: {eng?.state.linesCleared ?? 0}</div>
-            <div className="relative">
-              {eng && <GameBoard state={eng.state} ghostRow={eng.getGhostRow()} />}
-              {(gameOver || won) && (
-                <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-3">
-                  <div className={`text-xl font-bold ${won ? 'text-green-400' : 'text-red-400'}`}>
-                    {won ? 'YOU WIN!' : 'GAME OVER'}
-                  </div>
-                  <button
-                    onClick={() => setPhase('config')}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium"
-                  >
-                    Play Again
-                  </button>
-                </div>
-              )}
-            </div>
+            <div className="text-sm text-white/40">나 · 줄: {eng?.state.linesCleared ?? 0}</div>
+            {eng && <GameBoard state={eng.state} ghostRow={eng.getGhostRow()} />}
           </div>
           {eng && <NextQueue pieces={eng.state.next} />}
         </div>
@@ -145,6 +139,32 @@ export default function GamePage() {
           ))}
         </div>
       </div>
+
+      {/* Fullscreen result overlay */}
+      {isOver && (
+        <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center gap-6">
+          <div className={`text-4xl font-bold ${won ? 'text-green-400' : 'text-red-400'}`}>
+            {won ? '🎉 승리!' : '💀 게임오버'}
+          </div>
+          <div className="text-white/50 text-sm">
+            줄 클리어: {eng?.state.linesCleared ?? 0}
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={startGame}
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-semibold"
+            >
+              다시하기
+            </button>
+            <button
+              onClick={() => setPhase('config')}
+              className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg font-semibold"
+            >
+              나가기
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
