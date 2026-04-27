@@ -25,7 +25,6 @@ export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
   const refresh = useCallback(() => setTick(t => t + 1), [])
 
   const { initBot, addPiece, requestMove } = useBot({
-    onReady: () => requestMove(),
     onMove: (actions: string[], _hold: boolean) => { botActionsRef.current = actions },
   })
 
@@ -40,8 +39,9 @@ export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
     if (active) {
       initBot(active.type, next)
       addPiece(next[next.length - 1])
+      setTimeout(() => requestMove(), 50) // allow worker to process init before requesting first move
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps — init once on mount, intentional
 
   // Gravity loop
   useEffect(() => {
@@ -49,7 +49,11 @@ export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
     const id = setInterval(() => {
       const eng = engineRef.current
       if (!eng || eng.state.topOut) return
+      const prevType = eng.state.active?.type
       eng.tick()
+      if (eng.state.active?.type !== prevType) {
+        botActionsRef.current = [] // piece locked, discard stale actions for old piece
+      }
       if (eng.state.topOut && !notifiedRef.current) {
         notifiedRef.current = true
         onTopOutRef.current()
@@ -108,5 +112,6 @@ function applyAction(eng: GameEngine, action: string) {
     case 'rotate_ccw': eng.rotate(-1); break
     case 'rotate_180': eng.rotate(2); break
     case 'hold':       eng.hold(); break
+    default: break
   }
 }

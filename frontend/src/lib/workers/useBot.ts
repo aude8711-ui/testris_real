@@ -12,6 +12,10 @@ interface UseBotOptions {
 
 export function useBot({ onMove, onReady }: UseBotOptions) {
   const workerRef = useRef<Worker | null>(null)
+  const onMoveRef = useRef(onMove)
+  onMoveRef.current = onMove
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
 
   useEffect(() => {
     const worker = new Worker(
@@ -20,11 +24,11 @@ export function useBot({ onMove, onReady }: UseBotOptions) {
     )
     workerRef.current = worker
     worker.onmessage = (e: MessageEvent<BotMsg>) => {
-      if (e.data.type === 'ready') onReady?.()
-      if (e.data.type === 'move') onMove(e.data.actions, e.data.hold)
+      if (e.data.type === 'ready') onReadyRef.current?.()
+      if (e.data.type === 'move') onMoveRef.current(e.data.actions, e.data.hold)
     }
     return () => worker.terminate()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps — worker lifecycle tied to mount
 
   const initBot = useCallback((piece: PieceType, next: PieceType[]) => {
     workerRef.current?.postMessage({ type: 'init', piece, next })
