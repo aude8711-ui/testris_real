@@ -18,6 +18,7 @@ export default function GamePage() {
   const [tick, setTick] = useState(0)
   const [gameOver, setGameOver] = useState(false)
   const [won, setWon] = useState(false)
+  const [paused, setPaused] = useState(false)
   const botsDeadRef = useRef(0)
   const engineRef = useRef<GameEngine | null>(null)
   const bindings = useRef(loadBindings())
@@ -28,6 +29,7 @@ export default function GamePage() {
     botsDeadRef.current = 0
     setGameOver(false)
     setWon(false)
+    setPaused(false)
     setPhase('playing')
     refresh()
   }
@@ -37,9 +39,9 @@ export default function GamePage() {
     if (botsDeadRef.current >= botCount) setWon(true)
   }, [botCount])
 
-  // Player gravity
+  // Player gravity — stops when paused
   useEffect(() => {
-    if (phase !== 'playing') return
+    if (phase !== 'playing' || paused) return
     const id = setInterval(() => {
       const eng = engineRef.current
       if (!eng || eng.state.topOut) return
@@ -48,16 +50,21 @@ export default function GamePage() {
       refresh()
     }, GRAVITY_MS)
     return () => clearInterval(id)
-  }, [phase, refresh])
+  }, [phase, paused, refresh])
 
   // Player keyboard
   useEffect(() => {
     if (phase !== 'playing') return
     const handler = (e: KeyboardEvent) => {
+      // ESC toggles pause
+      if (e.code === 'Escape') {
+        setPaused(p => !p)
+        return
+      }
+      if (paused) return
       const eng = engineRef.current
       if (!eng || eng.state.topOut) return
       let action = resolveAction(e.code, bindings.current)
-      // Ctrl = rotate_ccw (Tetris Guideline standard alternative)
       if (!action && (e.code === 'ControlLeft' || e.code === 'ControlRight')) {
         action = 'rotate_ccw'
       }
@@ -69,11 +76,11 @@ export default function GamePage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [phase, refresh])
+  }, [phase, paused, refresh])
 
   const eng = engineRef.current
-  const running = phase === 'playing' && !gameOver && !won
   const isOver = gameOver || won
+  const running = phase === 'playing' && !isOver && !paused
 
   // Config screen
   if (phase === 'config') {
@@ -106,7 +113,7 @@ export default function GamePage() {
         </button>
         <div className="text-white/30 text-xs text-center leading-relaxed">
           ← → 이동 · ↑ 회전 · ↓ 소프트드롭 · Space 하드드롭<br />
-          Z 반시계 회전 · Ctrl 반시계 회전 · C 홀드
+          Z / Ctrl 반시계 회전 · C 홀드 · ESC 일시정지
         </div>
       </main>
     )
@@ -140,15 +147,35 @@ export default function GamePage() {
         </div>
       </div>
 
-      {/* Fullscreen result overlay */}
+      {/* Pause overlay */}
+      {paused && !isOver && (
+        <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center gap-6">
+          <div className="text-3xl font-bold text-white">일시정지</div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setPaused(false)}
+              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-semibold"
+            >
+              계속하기
+            </button>
+            <button
+              onClick={() => setPhase('config')}
+              className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg font-semibold"
+            >
+              나가기
+            </button>
+          </div>
+          <div className="text-white/30 text-xs">ESC로 재개</div>
+        </div>
+      )}
+
+      {/* Game over overlay */}
       {isOver && (
         <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center gap-6">
           <div className={`text-4xl font-bold ${won ? 'text-green-400' : 'text-red-400'}`}>
-            {won ? '🎉 승리!' : '💀 게임오버'}
+            {won ? '승리!' : '게임오버'}
           </div>
-          <div className="text-white/50 text-sm">
-            줄 클리어: {eng?.state.linesCleared ?? 0}
-          </div>
+          <div className="text-white/50 text-sm">줄 클리어: {eng?.state.linesCleared ?? 0}</div>
           <div className="flex gap-3">
             <button
               onClick={startGame}
