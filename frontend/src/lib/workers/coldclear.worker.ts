@@ -5,7 +5,7 @@ type PieceChar = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L' | 'G'
 
 interface InitMsg  { type: 'init';       piece: PieceChar; next: PieceChar[]; board?: number[][] }
 interface AddMsg   { type: 'addPiece';   piece: PieceChar }
-interface ReqMsg   { type: 'requestMove' }
+interface ReqMsg   { type: 'requestMove'; board?: number[][] }
 interface ResetMsg { type: 'reset';      piece: PieceChar; next: PieceChar[] }
 type InMsg = InitMsg | AddMsg | ReqMsg | ResetMsg
 
@@ -205,8 +205,8 @@ function bestMove(board: Board, type: PieceChar): { col: number; rot: number } {
       const row = drop(board, minos, col)
       if (!fits(board, minos, row, col)) continue
       const r = place(board, minos, row, col)
-      // tiny center-bias tiebreaker — prevents degenerate left-wall preference
-      const centerBias = -0.005 * Math.abs(col + pieceCenter - (COLS - 1) / 2)
+      // center-bias: penalizes wall placements; 3.5 overcomes El-Tetris row-transition wall advantage (~6.4)
+      const centerBias = -3.5 * Math.abs(col + pieceCenter - (COLS - 1) / 2) / (COLS / 2)
       const s = elTetris(r.board, r.landingRow, r.linesCleared, r.erasedCells) + centerBias
       if (s > best) { best = s; bestCol = col; bestRot = rot }
     }
@@ -274,6 +274,10 @@ self.addEventListener('message', async (e: MessageEvent<InMsg>) => {
       break
 
     case 'requestMove': {
+      // sync board from engine if provided — prevents divergence
+      if (msg.board) {
+        jsBoard = msg.board.map(row => row.map(c => (c ? 1 : 0)))
+      }
       if (wasmBot) {
         const result = wasmBot.nextMove({})
         if (result) {

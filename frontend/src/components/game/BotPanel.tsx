@@ -5,7 +5,7 @@ import { useBot } from '@/lib/workers/useBot'
 import { GameBoard } from './GameBoard'
 
 const GRAVITY_MS = 800
-const BOT_THINK_MS = 200
+const BOT_THINK_MS = 100
 
 interface Props {
   cellSize: number
@@ -76,7 +76,7 @@ export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
         const { active, next } = eng.state
         if (active) {
           addPiece(active.type) // sync JS bot's currentPiece to actual active piece
-          requestMove()
+          requestMove(eng.state.board)
         }
       }
       refresh()
