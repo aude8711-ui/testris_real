@@ -49,7 +49,7 @@ export function GameBoard({ state, ghostRow, cellSize = 32 }: Props) {
         drawMino(ctx, state.active.col + dc, ROWS - 1 - (state.active.row + dr), PIECE_COLORS[state.active.type], cellSize)
       }
     }
-  }, [state, ghostRow, cellSize])
+  }) // no deps — engine mutates state in-place, so we redraw on every render
 
   return (
     <canvas

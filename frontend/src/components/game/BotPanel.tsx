@@ -38,7 +38,8 @@ export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
     const { active, next } = eng.state
     if (active) {
       initBot(active.type, next)
-      addPiece(next[next.length - 1])
+      // Don't call addPiece here — initBot already sets currentPiece for JS bot;
+      // calling addPiece(next[4]) would corrupt it to the wrong piece
       setTimeout(() => requestMove(), 50) // allow worker to process init before requesting first move
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps — init once on mount, intentional
@@ -74,7 +75,7 @@ export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
       if (botActionsRef.current.length === 0) {
         const { active, next } = eng.state
         if (active) {
-          addPiece(next[next.length - 1])
+          addPiece(active.type) // sync JS bot's currentPiece to actual active piece
           requestMove()
         }
       }
