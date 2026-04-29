@@ -1,14 +1,19 @@
 'use client'
 import { useEffect, useRef, useCallback, useState } from 'react'
+import Link from 'next/link'
 import { GameEngine } from '@/lib/tetris/engine'
+import { calculateAttack } from '@/lib/tetris/attack'
 import { resolveAction, loadBindings } from '@/lib/tetris/keybindings'
+import { loadHandling } from '@/lib/tetris/handling'
 import { GameBoard } from '@/components/game/GameBoard'
 import { NextQueue } from '@/components/game/NextQueue'
 import { HoldPiece } from '@/components/game/HoldPiece'
 import { BotPanel } from '@/components/game/BotPanel'
+import { applyAction } from '@/lib/tetris/actions'
 
 const GRAVITY_MS = 800
 const BOT_CELL: Record<number, number> = { 1: 30, 2: 16, 3: 10 }
+const DAS_ACTIONS = new Set(['move_left', 'move_right'])
 
 type Phase = 'config' | 'playing'
 
@@ -19,14 +24,61 @@ export default function GamePage() {
   const [gameOver, setGameOver] = useState(false)
   const [won, setWon] = useState(false)
   const [paused, setPaused] = useState(false)
+  const [gameKey, setGameKey] = useState(0)
   const botsDeadRef = useRef(0)
   const engineRef = useRef<GameEngine | null>(null)
   const bindings = useRef(loadBindings())
+  const handling = useRef(loadHandling())
   const refresh = useCallback(() => setTick(t => t + 1), [])
+  const dasTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const arrTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const dasActionRef = useRef<string | null>(null)
+  const softDropTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const clearDAS = useCallback(() => {
+    if (dasTimerRef.current) { clearTimeout(dasTimerRef.current); dasTimerRef.current = null }
+    if (arrTimerRef.current) { clearInterval(arrTimerRef.current); arrTimerRef.current = null }
+    dasActionRef.current = null
+  }, [])
+  const clearSoftDrop = useCallback(() => {
+    if (softDropTimerRef.current) { clearInterval(softDropTimerRef.current); softDropTimerRef.current = null }
+  }, [])
+
+  // Bot engines — created in startGame(), read directly (no forwardRef timing issues)
+  const botEngineRef0 = useRef<GameEngine | null>(null)
+  const botEngineRef1 = useRef<GameEngine | null>(null)
+  const botEngineRef2 = useRef<GameEngine | null>(null)
+  const botEngineRefs = [botEngineRef0, botEngineRef1, botEngineRef2]
+
+  // Track player's last lock to detect new line clears
+  const lastLockRef = useRef<object | null>(null)
+  const checkPlayerAttackRef = useRef<() => void>(() => {})
+  checkPlayerAttackRef.current = () => {
+    const eng = engineRef.current
+    if (!eng || !eng.state.lastLock) return
+    if (eng.state.lastLock === lastLockRef.current) return
+    lastLockRef.current = eng.state.lastLock
+    const attack = calculateAttack(eng.state.lastLock)
+    if (attack <= 0) return
+    for (let i = 0; i < botCount; i++) {
+      botEngineRefs[i].current?.receiveGarbage(attack)
+    }
+  }
+  function checkPlayerAttack() { checkPlayerAttackRef.current() }
+
+  // Bot sends garbage to player
+  const handleBotAttack = useCallback((lines: number) => {
+    engineRef.current?.receiveGarbage(lines)
+  }, [])
 
   function startGame() {
-    engineRef.current = new GameEngine(Date.now())
+    const seed = Date.now()
+    engineRef.current = new GameEngine(seed)
+    for (let i = 0; i < 3; i++) {
+      botEngineRefs[i].current = new GameEngine(seed + (i + 1) * 99991 + Math.trunc(Math.random() * 9999))
+    }
+    lastLockRef.current = null
     botsDeadRef.current = 0
+    setGameKey(k => k + 1)
     setGameOver(false)
     setWon(false)
     setPaused(false)
@@ -39,53 +91,108 @@ export default function GamePage() {
     if (botsDeadRef.current >= botCount) setWon(true)
   }, [botCount])
 
-  // Player gravity — stops when paused
+  // 60fps render loop — also polls for lock-delay attacks (natural gravity lock)
   useEffect(() => {
-    if (phase !== 'playing' || paused) return
+    if (phase !== 'playing' || paused || gameOver || won) return
+    let rafId: number
+    const loop = () => {
+      checkPlayerAttackRef.current()
+      refresh()
+      rafId = requestAnimationFrame(loop)
+    }
+    rafId = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(rafId)
+  }, [phase, paused, gameOver, won, refresh])
+
+  // Player gravity
+  useEffect(() => {
+    if (phase !== 'playing' || paused || gameOver || won) return
     const id = setInterval(() => {
       const eng = engineRef.current
       if (!eng || eng.state.topOut) return
       eng.tick()
+      checkPlayerAttack()
       if (eng.state.topOut) setGameOver(true)
-      refresh()
     }, GRAVITY_MS)
     return () => clearInterval(id)
-  }, [phase, paused, refresh])
+  }, [phase, paused, gameOver, won]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Player keyboard
+  // Player keyboard with DAS/ARR
   useEffect(() => {
-    if (phase !== 'playing') return
-    const handler = (e: KeyboardEvent) => {
-      // ESC toggles pause
+    if (phase !== 'playing' || gameOver || won) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return
       if (e.code === 'Escape') {
-        setPaused(p => !p)
+        const next = !paused
+        if (next) engineRef.current?.pauseLock()
+        else engineRef.current?.resumeLock()
+        setPaused(next)
+        clearDAS()
         return
       }
       if (paused) return
       const eng = engineRef.current
       if (!eng || eng.state.topOut) return
       let action = resolveAction(e.code, bindings.current)
-      if (!action && (e.code === 'ControlLeft' || e.code === 'ControlRight')) {
-        action = 'rotate_ccw'
-      }
+      if (!action && (e.code === 'ControlLeft' || e.code === 'ControlRight')) action = 'rotate_cw'
       if (!action) return
       e.preventDefault()
       applyAction(eng, action)
+      checkPlayerAttack()
       if (eng.state.topOut) setGameOver(true)
-      refresh()
+
+      if (action === 'soft_drop' && !softDropTimerRef.current) {
+        const softDropMs = Math.max(1, Math.round(GRAVITY_MS / handling.current.sdf))
+        softDropTimerRef.current = setInterval(() => {
+          const e2 = engineRef.current
+          if (!e2 || e2.state.topOut) return
+          applyAction(e2, 'soft_drop')
+          checkPlayerAttack()
+          if (e2.state.topOut) setGameOver(true)
+        }, softDropMs)
+      } else if (DAS_ACTIONS.has(action) && dasActionRef.current !== action) {
+        clearDAS()
+        dasActionRef.current = action
+        const { das, arr } = handling.current
+        dasTimerRef.current = setTimeout(() => {
+          arrTimerRef.current = setInterval(() => {
+            const e2 = engineRef.current
+            if (!e2 || e2.state.topOut) return
+            applyAction(e2, dasActionRef.current!)
+            checkPlayerAttack()
+            if (e2.state.topOut) setGameOver(true)
+          }, arr)
+        }, das)
+      }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [phase, paused, refresh])
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      const action = resolveAction(e.code, bindings.current)
+        ?? ((e.code === 'ControlLeft' || e.code === 'ControlRight') ? 'rotate_ccw' : null)
+      if (!action) return
+      if (action === 'soft_drop') clearSoftDrop()
+      else if (dasActionRef.current === action) clearDAS()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      clearDAS()
+      clearSoftDrop()
+    }
+  }, [phase, paused, clearDAS, clearSoftDrop]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const eng = engineRef.current
   const isOver = gameOver || won
   const running = phase === 'playing' && !isOver && !paused
 
-  // Config screen
   if (phase === 'config') {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center gap-8 text-white">
+        <Link href="/play" className="absolute top-6 left-6 text-sm text-white/50 hover:text-white transition">← Back</Link>
         <h1 className="text-3xl font-bold">vs AI</h1>
         <div className="flex flex-col items-center gap-3">
           <p className="text-white/50 text-sm">봇 수</p>
@@ -119,7 +226,6 @@ export default function GamePage() {
     )
   }
 
-  // Game screen
   return (
     <div className="relative min-h-screen bg-[#0d0d0f] flex items-center justify-center text-white">
       <div className="flex gap-8 items-start">
@@ -137,11 +243,13 @@ export default function GamePage() {
         <div className="flex flex-col gap-4 justify-center" style={{ height: 20 * 32 }}>
           {Array.from({ length: botCount }, (_, i) => (
             <BotPanel
-              key={i}
+              key={`${gameKey}-${i}`}
+              engine={botEngineRefs[i].current!}
               cellSize={BOT_CELL[botCount]}
               running={running}
               label={`Bot ${i + 1}`}
               onTopOut={handleBotTopOut}
+              onAttack={handleBotAttack}
             />
           ))}
         </div>
@@ -153,7 +261,7 @@ export default function GamePage() {
           <div className="text-3xl font-bold text-white">일시정지</div>
           <div className="flex gap-3">
             <button
-              onClick={() => setPaused(false)}
+              onClick={() => { engineRef.current?.resumeLock(); setPaused(false) }}
               className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-semibold"
             >
               계속하기
@@ -171,23 +279,22 @@ export default function GamePage() {
 
       {/* Game over overlay */}
       {isOver && (
-        <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center gap-6">
-          <div className={`text-4xl font-bold ${won ? 'text-green-400' : 'text-red-400'}`}>
-            {won ? '승리!' : '게임오버'}
+        <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-8">
+          <div className={`text-6xl font-bold tracking-widest ${won ? 'text-green-400' : 'text-red-400'}`}>
+            {won ? 'YOU WIN' : 'YOU LOSE'}
           </div>
-          <div className="text-white/50 text-sm">줄 클리어: {eng?.state.linesCleared ?? 0}</div>
-          <div className="flex gap-3">
+          <div className="flex gap-4">
             <button
               onClick={startGame}
-              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-semibold"
+              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-lg font-semibold"
             >
-              다시하기
+              Play Again
             </button>
             <button
               onClick={() => setPhase('config')}
-              className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg font-semibold"
+              className="px-8 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-lg font-semibold"
             >
-              나가기
+              Main Menu
             </button>
           </div>
         </div>
@@ -196,15 +303,3 @@ export default function GamePage() {
   )
 }
 
-function applyAction(eng: GameEngine, action: string) {
-  switch (action) {
-    case 'move_left':  eng.move('left'); break
-    case 'move_right': eng.move('right'); break
-    case 'soft_drop':  eng.softDrop(); break
-    case 'hard_drop':  eng.hardDrop(); break
-    case 'rotate_cw':  eng.rotate(1); break
-    case 'rotate_ccw': eng.rotate(-1); break
-    case 'rotate_180': eng.rotate(2); break
-    case 'hold':       eng.hold(); break
-  }
-}

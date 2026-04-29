@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { GameEngine } from '@/lib/tetris/engine'
+import { calculateAttack } from '@/lib/tetris/attack'
+import { applyAction } from '@/lib/tetris/actions'
 import { useBot } from '@/lib/workers/useBot'
 import { GameBoard } from './GameBoard'
 
@@ -8,19 +10,25 @@ const GRAVITY_MS = 800
 const BOT_THINK_MS = 100
 
 interface Props {
+  engine: GameEngine
   cellSize: number
   running: boolean
   label: string
   onTopOut: () => void
+  onAttack?: (lines: number) => void
 }
 
-export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
+export function BotPanel({ engine, cellSize, running, label, onTopOut, onAttack }: Props) {
   const [tick, setTick] = useState(0)
-  const engineRef = useRef<GameEngine | null>(null)
+  // engineRef is initialized from the engine prop — stable for this component's lifetime
+  const engineRef = useRef<GameEngine>(engine)
   const notifiedRef = useRef(false)
   const botActionsRef = useRef<string[]>([])
   const onTopOutRef = useRef(onTopOut)
   onTopOutRef.current = onTopOut
+  const onAttackRef = useRef(onAttack)
+  onAttackRef.current = onAttack
+  const lastLockRef = useRef<object | null>(null)
 
   const refresh = useCallback(() => setTick(t => t + 1), [])
 
@@ -28,23 +36,27 @@ export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
     onMove: (actions: string[], _hold: boolean) => { botActionsRef.current = actions },
   })
 
-  // Initialize engine and bot on mount
   useEffect(() => {
-    const eng = new GameEngine(Date.now() + Math.random() * 100000)
-    engineRef.current = eng
     notifiedRef.current = false
+    lastLockRef.current = null
     botActionsRef.current = []
     refresh()
-    const { active, next } = eng.state
+    const { active, next } = engine.state
     if (active) {
       initBot(active.type, next)
-      // Don't call addPiece here — initBot already sets currentPiece for JS bot;
-      // calling addPiece(next[4]) would corrupt it to the wrong piece
-      setTimeout(() => requestMove(), 50) // allow worker to process init before requesting first move
+      setTimeout(() => requestMove(), 50)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps — init once on mount, intentional
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Gravity loop
+  // 60fps render loop
+  useEffect(() => {
+    if (!running) return
+    let rafId: number
+    const loop = () => { refresh(); rafId = requestAnimationFrame(loop) }
+    rafId = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(rafId)
+  }, [running, refresh])
+
   useEffect(() => {
     if (!running) return
     const id = setInterval(() => {
@@ -52,19 +64,15 @@ export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
       if (!eng || eng.state.topOut) return
       const prevType = eng.state.active?.type
       eng.tick()
-      if (eng.state.active?.type !== prevType) {
-        botActionsRef.current = [] // piece locked, discard stale actions for old piece
-      }
+      if (eng.state.active?.type !== prevType) botActionsRef.current = []
       if (eng.state.topOut && !notifiedRef.current) {
         notifiedRef.current = true
         onTopOutRef.current()
       }
-      refresh()
     }, GRAVITY_MS)
     return () => clearInterval(id)
-  }, [running, refresh])
+  }, [running])
 
-  // Bot move application loop
   useEffect(() => {
     if (!running) return
     const id = setInterval(() => {
@@ -72,20 +80,31 @@ export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
       if (!eng || eng.state.topOut || botActionsRef.current.length === 0) return
       const action = botActionsRef.current.shift()!
       applyAction(eng, action)
+
+      if (eng.state.topOut && !notifiedRef.current) {
+        notifiedRef.current = true
+        onTopOutRef.current()
+        return
+      }
+
+      if (eng.state.lastLock !== lastLockRef.current) {
+        lastLockRef.current = eng.state.lastLock
+        const attack = calculateAttack(eng.state.lastLock!)
+        if (attack > 0) onAttackRef.current?.(attack)
+      }
+
       if (botActionsRef.current.length === 0) {
-        const { active, next } = eng.state
+        const { active } = eng.state
         if (active) {
-          addPiece(active.type) // sync JS bot's currentPiece to actual active piece
-          requestMove(eng.state.board)
+          addPiece(active.type)
+          requestMove(eng.state.board.map(row => row.map(c => (c ? 1 : 0))))
         }
       }
-      refresh()
     }, BOT_THINK_MS)
     return () => clearInterval(id)
-  }, [running, refresh, addPiece, requestMove])
+  }, [running, addPiece, requestMove])
 
   const eng = engineRef.current
-  if (!eng) return null
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -101,18 +120,4 @@ export function BotPanel({ cellSize, running, label, onTopOut }: Props) {
       <div className="text-xs text-white/40">Lines: {eng.state.linesCleared}</div>
     </div>
   )
-}
-
-function applyAction(eng: GameEngine, action: string) {
-  switch (action) {
-    case 'move_left':  eng.move('left'); break
-    case 'move_right': eng.move('right'); break
-    case 'soft_drop':  eng.softDrop(); break
-    case 'hard_drop':  eng.hardDrop(); break
-    case 'rotate_cw':  eng.rotate(1); break
-    case 'rotate_ccw': eng.rotate(-1); break
-    case 'rotate_180': eng.rotate(2); break
-    case 'hold':       eng.hold(); break
-    default: break
-  }
 }

@@ -1,5 +1,6 @@
 import { api } from '@/lib/api'
 import { notFound } from 'next/navigation'
+import Link from 'next/link'
 
 export default async function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -9,6 +10,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
 
   return (
     <main className="min-h-screen p-8 max-w-lg mx-auto">
+      <Link href="/play" className="inline-block mb-6 text-sm text-white/50 hover:text-white transition">← Back</Link>
       <h1 className="text-3xl font-bold mb-1">{profile.nickname ?? profile.guest_tag}</h1>
       <p className="text-white/40 text-sm mb-6">Joined {new Date(profile.created_at).toLocaleDateString()}</p>
       <div className="grid grid-cols-3 gap-4 text-center">

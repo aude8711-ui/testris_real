@@ -7,7 +7,7 @@ export const defaultBindings: KeyBindings = {
   move_right:  'ArrowRight',
   soft_drop:   'ArrowDown',
   hard_drop:   'Space',
-  rotate_cw:   'ArrowUp',
+  rotate_cw:   'KeyX',
   rotate_ccw:  'KeyZ',
   rotate_180:  'KeyA',
   hold:        'KeyC',
