@@ -8,14 +8,10 @@ const BASE_ATTACK: Record<number, Record<string, number>> = {
   4: { none: 4, mini: 4, full: 4 },
 }
 
-const COMBO_TABLE = [0, 0, 2, 2, 3, 3, 4, 5]
-
 export function calculateAttack(result: LockResult): number {
-  if (result.linesCleared === 0) return 0
+  if (result.linesCleared === 0) return result.surge
   let attack = BASE_ATTACK[result.linesCleared]?.[result.tSpin] ?? 0
-  if (result.b2b && (result.linesCleared === 4 || result.tSpin !== 'none')) attack += 1
-  if (result.allClear) return 10 + attack
-  const comboIdx = Math.min(result.combo - 1, COMBO_TABLE.length - 1)
-  attack += comboIdx >= 0 ? COMBO_TABLE[comboIdx] : 0
-  return attack
+  if (result.b2b > 0 && (result.linesCleared === 4 || result.tSpin !== 'none')) attack += 1
+  if (result.allClear) return 5 + attack + result.surge
+  return Math.floor(attack * (1 + 0.25 * (result.combo - 1))) + result.surge
 }
