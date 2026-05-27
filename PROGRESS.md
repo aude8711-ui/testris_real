@@ -1,4 +1,4 @@
-# Testris — 진행 상황 (2026-05-27)
+# Testris — 진행 상황 (2026-05-28)
 
 ## 프로젝트 개요
 
@@ -149,7 +149,8 @@ testris/                          ← 이 디렉토리 기준
 - SRS 킥 테이블 수정 (180° 킥 포함)
 - 피스 스폰 방향 수정 (J, L, T, S, Z CW/CCW 버그 수정)
 - 피스 색상 수정
-- 회전 키바인딩 수정
+- 회전 키바인딩 기본값 확정: ArrowUp=CW, Control=CCW, A=180°, C=홀드
+  (`keybindings.ts` + `game/page.tsx` Control fallback 동시 수정)
 
 ### Phase 6 — 프론트엔드 UI ✅
 - 로그인(Google OAuth), 모드 선택, 룸 목록/생성, 룸 게임, 프로필, 설정, Pricing 페이지
