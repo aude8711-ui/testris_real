@@ -35,10 +35,11 @@ export interface LockResult {
   surge: number // B2B Surge lines fired this lock (> 0 when B2B chain ≥ 4 breaks)
 }
 
-const BOARD_ROWS = 20
+const BOARD_ROWS = 24      // 20 visible rows + 4 buffer rows above (rows 20-23)
+const VISIBLE_ROWS = 20   // rows rendered to the player
 const BOARD_COLS = 10
 const NEXT_COUNT = 5
-const SPAWN_ROW = 17  // all piece rotation-0 minos fit within [0,19] at this row
+const SPAWN_ROW = 20      // spawn in buffer zone, just above visible area
 
 function emptyBoard(): GameBoard {
   return Array.from({ length: BOARD_ROWS }, () => Array(BOARD_COLS).fill(null))
@@ -158,17 +159,28 @@ export class GameEngine {
     this.lockTimer = null
     this.lockMoves = 0
 
+    let anyInBoard = false
     for (const [r, c] of PIECES[active.type][active.rotation]) {
       const row = active.row + r
       const col = active.col + c
-      if (row >= 0 && row < BOARD_ROWS) board[row][col] = active.type
+      if (row >= 0 && row < BOARD_ROWS) {
+        board[row][col] = active.type
+        if (row < VISIBLE_ROWS) anyInBoard = true  // Lock Out: only visible rows count
+      }
+    }
+    if (!anyInBoard) {
+      this.state.topOut = true
+      this.state.active = null
+      const result: LockResult = { linesCleared: 0, tSpin: 'none', allClear: false, combo: 0, b2b: this.state.b2b, surge: 0 }
+      this.state.lastLock = result
+      return result
     }
 
     const tSpin = this.detectSpin(active)
     this.lastRotation = false
 
     const cleared: number[] = []
-    for (let r = 0; r < BOARD_ROWS; r++) {
+    for (let r = 0; r < VISIBLE_ROWS; r++) {
       if (board[r].every(cell => cell !== null)) cleared.push(r)
     }
     for (const r of cleared.reverse()) {
@@ -194,7 +206,7 @@ export class GameEngine {
     }
     this.state.garbageQueue = []
 
-    const allClear = board.every(row => row.every(c => c === null))
+    const allClear = board.slice(0, VISIBLE_ROWS).every(row => row.every(c => c === null))
     const isB2bMove = cleared.length === 4 || (tSpin !== 'none' && cleared.length > 0)
     const prevB2b = this.state.b2b
     const b2bBroken = !isB2bMove && cleared.length > 0 && prevB2b > 0
@@ -220,13 +232,7 @@ export class GameEngine {
   private spawnNext() {
     const next = this.state.next.shift()!
     this.state.next.push(this.bag.next())
-    const piece = spawnPiece(next)
-    if (!fitsOnBoard(piece, this.state.board)) {
-      this.state.topOut = true
-      this.state.active = null
-    } else {
-      this.state.active = piece
-    }
+    this.state.active = spawnPiece(next)
   }
 
   private addGarbage(lines: number, col: number) {

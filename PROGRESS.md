@@ -1,4 +1,4 @@
-# Testris — 진행 상황 (2026-04-30)
+# Testris — 진행 상황 (2026-05-27)
 
 ## 프로젝트 개요
 
@@ -128,7 +128,9 @@ testris/                          ← 이 디렉토리 기준
 - 랭크 TR 계산 (게임 종료 시 DB 업데이트)
 
 ### Phase 4 — 게임 엔진 ✅
-- `engine.ts`: SRS 회전, lock delay, 7-bag, topOut 감지, 가비지 수신
+- `engine.ts`: SRS 회전, lock delay, 7-bag, 가비지 수신
+- `engine.ts`: **Lock Out 게임오버** (피스가 버퍼 구역에 완전히 잠길 때만 사망 — BOARD_ROWS=24, VISIBLE_ROWS=20, SPAWN_ROW=20으로 버퍼 구역 도입)
+- `engine.ts`: **T-spin 감지** (3-코너 룰 full/mini + non-T immobile all-spin)
 - `attack.ts`: B2B, 콤보, T-spin 가비지 계산
 - 테스트: `__tests__/` 내 engine, rotation, attack, randomizer, keybindings
 
@@ -142,6 +144,13 @@ testris/                          ← 이 디렉토리 기준
 - `BotPanel.tsx`: 봇 보드 렌더 + 봇 루프 (가비지 송수신)
 - 키: ← → 이동, ↑ 회전CW, Z/Ctrl 반시계, A 180도, Space 하드드롭, C 홀드, ESC 일시정지
 
+### Phase 5.5 — 입력 시스템 개선 ✅
+- DAS/ARR/SDF 핸들링 구현
+- SRS 킥 테이블 수정 (180° 킥 포함)
+- 피스 스폰 방향 수정 (J, L, T, S, Z CW/CCW 버그 수정)
+- 피스 색상 수정
+- 회전 키바인딩 수정
+
 ### Phase 6 — 프론트엔드 UI ✅
 - 로그인(Google OAuth), 모드 선택, 룸 목록/생성, 룸 게임, 프로필, 설정, Pricing 페이지
 - Vercel 배포 완료
@@ -153,7 +162,7 @@ testris/                          ← 이 디렉토리 기준
 
 ## 현재 진행 중
 
-- 피스 스폰 방향 수정 (J, L, T, S, Z + CW/CCW 버그)
+- 없음 (모든 핵심 버그 수정 완료)
 
 ---
 
@@ -197,12 +206,10 @@ vercel --prod
 
 ---
 
-### 🟡 선택: T-spin 구현
+### 🟡 선택: T-spin ~~구현~~ ✅ 완료
 
-현재 El-Tetris는 `hard_drop`만 사용. T-spin은 구조상 추가 복잡:
-- `engine.ts`에 T-spin 판정 로직 추가 필요
-- `attack.ts`는 이미 T-spin 가비지 계산 지원 (`lastLock.tspin` 필드 기반)
-- 봇 워커는 hard_drop 위주라 T-spin 플레이 안 함 (ColdClear WASM은 지원)
+~~`engine.ts`에 T-spin 판정 로직 추가 필요~~  
+`detectSpin()` 구현 완료. 봇은 여전히 hard_drop 위주라 T-spin 플레이 안 함 (ColdClear WASM은 지원).
 
 ---
 
@@ -213,7 +220,7 @@ vercel --prod
 | 결제 버튼 `#` 링크 | `NEXT_PUBLIC_POLAR_CHECKOUT_URL` 미설정 | 위 Polar 연동 단계 |
 | ColdClear WASM 없음 | WASM 파일 미배치 | `/public/wasm/`에 파일 추가 |
 | 봇이 T-spin 안 함 | El-Tetris = hard_drop only | ColdClear WASM 사용 시 해결 |
-| 게임오버 판정 버그 | 천장 닿으면 즉시 사망 (Block Out 방식) | Lock Out 방식으로 수정 필요 |
+| ~~게임오버 판정 버그~~ | ~~Block Out 방식~~ | ✅ Lock Out 방식으로 수정 완료 |
 
 ---
 

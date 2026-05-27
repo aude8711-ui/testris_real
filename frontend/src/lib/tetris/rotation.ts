@@ -45,7 +45,7 @@ export function fitsOnBoard(piece: ActivePiece, board: GameBoard): boolean {
   for (const [r, c] of minos) {
     const row = piece.row + r
     const col = piece.col + c
-    if (row < 0 || row >= 20 || col < 0 || col >= 10) return false
+    if (row < 0 || row >= board.length || col < 0 || col >= 10) return false
     if (board[row][col] !== null) return false
   }
   return true
