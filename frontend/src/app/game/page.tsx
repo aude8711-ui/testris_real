@@ -135,7 +135,7 @@ export default function GamePage() {
       const eng = engineRef.current
       if (!eng || eng.state.topOut) return
       let action = resolveAction(e.code, bindings.current)
-      if (!action && (e.code === 'ControlLeft' || e.code === 'ControlRight')) action = 'rotate_cw'
+      if (!action && (e.code === 'ControlLeft' || e.code === 'ControlRight')) action = 'rotate_ccw'
       if (!action) return
       e.preventDefault()
       applyAction(eng, action)
