@@ -148,8 +148,7 @@ testris/                          ← 이 디렉토리 기준
 - DAS/ARR/SDF 핸들링 구현
 - SRS 킥 테이블 수정 (180° 킥 포함)
 - 피스 스폰 방향 수정 (J, L, T, S, Z CW/CCW 버그 수정)
-- 피스 색상 수정 ⚠️ **버그 잔존**: S/Z, J/L 색상 쌍이 서로 교체된 채로 남아있음  
-  (`pieces.ts`: S=`#f00000`빨강↔Z=`#00f000`초록, J=`#f0a000`주황↔L=`#0000f0`파랑 — 가이드라인과 반대)
+- 피스 색상 수정 ✅ (S=초록, Z=빨강, J=파랑, L=주황 — Tetris Guideline 기준 완료)
 - 회전 키바인딩 기본값 확정: ArrowUp=CW, Control=CCW, A=180°, C=홀드
   (`keybindings.ts` + `game/page.tsx` Control fallback 동시 수정)
 
@@ -172,7 +171,7 @@ testris/                          ← 이 디렉토리 기준
 | 키 바인딩 기본값 | `keybindings.ts` L10-11 | ✅ 정상 | `rotate_cw='ArrowUp'`, `rotate_ccw='Control'` |
 | Lock Out 게임오버 | `engine.ts` L162-176 | ✅ 정상 | `anyInBoard` 체크, 버퍼 구역만 잠기면 `topOut=true` |
 | T-spin 감지 + 공격 계산 | `engine.ts` L252-279, `attack.ts` L13-14 | ✅ 정상 | `detectSpin()` 3코너룰 + immobile, `LockResult.tSpin` → `BASE_ATTACK` 조회 |
-| 피스 색상 (S/Z, J/L) | `pieces.ts` L56-59 | ⚠️ 버그 | S(빨강)↔Z(초록), J(주황)↔L(파랑) 쌍 교체됨 |
+| 피스 색상 (S/Z, J/L) | `pieces.ts` L56-59 | ✅ 수정완료 | S=초록, Z=빨강, J=파랑, L=주황으로 Guideline 맞춤 |
 
 ---
 
@@ -237,7 +236,7 @@ vercel --prod
 | ColdClear WASM 없음 | WASM 파일 미배치 | `/public/wasm/`에 파일 추가 |
 | 봇이 T-spin 안 함 | El-Tetris = hard_drop only | ColdClear WASM 사용 시 해결 |
 | ~~게임오버 판정 버그~~ | ~~Block Out 방식~~ | ✅ Lock Out 방식으로 수정 완료 |
-| 피스 색상 S/Z·J/L 쌍 교체 | `pieces.ts` 색상값 실수 | S↔Z, J↔L 색상 4개 교체 (선택적 수정) |
+| ~~피스 색상 S/Z·J/L 쌍 교체~~ | ~~`pieces.ts` 색상값 실수~~ | ✅ 수정 완료 |
 
 ---
 

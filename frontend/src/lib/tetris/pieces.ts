@@ -53,10 +53,10 @@ export const PIECE_COLORS: Record<PieceType, string> = {
   I: '#00f0f0',
   O: '#f0f000',
   T: '#a000f0',
-  S: '#f00000',
-  Z: '#00f000',
-  J: '#f0a000',
-  L: '#0000f0',
+  S: '#00f000',
+  Z: '#f00000',
+  J: '#0000f0',
+  L: '#f0a000',
   G: '#888888',
 }
 
