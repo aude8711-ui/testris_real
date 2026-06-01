@@ -38,8 +38,8 @@ export function useBot({ onMove, onReady }: UseBotOptions) {
     workerRef.current?.postMessage({ type: 'addPiece', piece })
   }, [])
 
-  const requestMove = useCallback((board?: number[][]) => {
-    workerRef.current?.postMessage({ type: 'requestMove', board })
+  const requestMove = useCallback((board?: number[][], next?: PieceType[]) => {
+    workerRef.current?.postMessage({ type: 'requestMove', board, next })
   }, [])
 
   const resetBot = useCallback((piece: PieceType, next: PieceType[]) => {

@@ -97,7 +97,10 @@ export function BotPanel({ engine, cellSize, running, label, onTopOut, onAttack 
         const { active } = eng.state
         if (active) {
           addPiece(active.type)
-          requestMove(eng.state.board.map(row => row.map(c => (c ? 1 : 0))))
+          requestMove(
+            eng.state.board.map(row => row.map(c => (c ? 1 : 0))),
+            eng.state.next,
+          )
         }
       }
     }, BOT_THINK_MS)

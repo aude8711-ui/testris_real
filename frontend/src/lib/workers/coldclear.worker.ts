@@ -5,7 +5,7 @@ type PieceChar = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L' | 'G'
 
 interface InitMsg  { type: 'init';       piece: PieceChar; next: PieceChar[]; board?: number[][] }
 interface AddMsg   { type: 'addPiece';   piece: PieceChar }
-interface ReqMsg   { type: 'requestMove'; board?: number[][] }
+interface ReqMsg   { type: 'requestMove'; board?: number[][]; next?: PieceChar[] }
 interface ResetMsg { type: 'reset';      piece: PieceChar; next: PieceChar[] }
 type InMsg = InitMsg | AddMsg | ReqMsg | ResetMsg
 
@@ -217,6 +217,48 @@ function bestMove(board: Board, type: PieceChar): { col: number; rot: number } {
   return { col: bestCol, rot: bestRot }
 }
 
+// Returns the best El-Tetris score achievable for `type` on `board` (any placement).
+function bestScore(board: Board, type: PieceChar): number {
+  const rotations = MINOS[type]?.length ?? 1
+  let best = -Infinity
+  for (let rot = 0; rot < rotations; rot++) {
+    const minos = MINOS[type]?.[rot] ?? []
+    const dcVals = minos.map(([, dc]) => dc)
+    const pieceCenter = (Math.min(...dcVals) + Math.max(...dcVals)) / 2
+    for (let col = -2; col < COLS + 2; col++) {
+      const row = drop(board, minos, col)
+      if (!fits(board, minos, row, col)) continue
+      const r = place(board, minos, row, col)
+      const centerBias = -3.5 * Math.abs(col + pieceCenter - (COLS - 1) / 2) / (COLS / 2)
+      const s = elTetris(r.board, r.landingRow, r.linesCleared, r.erasedCells) + centerBias
+      if (s > best) best = s
+    }
+  }
+  return best === -Infinity ? 0 : best
+}
+
+// 2-piece lookahead: picks the placement of `type` that maximises
+// eval(board_after_type) + best_eval(board_after_nextType).
+function bestMove2(board: Board, type: PieceChar, nextType: PieceChar): { col: number; rot: number } {
+  const rotations = MINOS[type]?.length ?? 1
+  let best = -Infinity, bestCol = 0, bestRot = 0
+  for (let rot = 0; rot < rotations; rot++) {
+    const minos = MINOS[type]?.[rot] ?? []
+    const dcVals = minos.map(([, dc]) => dc)
+    const pieceCenter = (Math.min(...dcVals) + Math.max(...dcVals)) / 2
+    for (let col = -2; col < COLS + 2; col++) {
+      const row = drop(board, minos, col)
+      if (!fits(board, minos, row, col)) continue
+      const r = place(board, minos, row, col)
+      const centerBias = -3.5 * Math.abs(col + pieceCenter - (COLS - 1) / 2) / (COLS / 2)
+      const s = elTetris(r.board, r.landingRow, r.linesCleared, r.erasedCells) + centerBias
+              + bestScore(r.board, nextType)
+      if (s > best) { best = s; bestCol = col; bestRot = rot }
+    }
+  }
+  return { col: bestCol, rot: bestRot }
+}
+
 // At spawn (row=17, col=3), SRS kick shifts I-piece vertical rotations:
 //   rot=1 (CW):  kick [+1,-2] → actual col = 4
 //   rot=3 (CCW): kick [-1,-2] → actual col = 2
@@ -245,6 +287,7 @@ function movesToPlace(type: PieceChar, targetRot: number, targetCol: number): st
 
 let jsBoard: Board = emptyBoard()
 let currentPiece: PieceChar = 'I'
+let nextQueue: PieceChar[] = []
 let wasmBot: any = null
 
 async function tryLoadWasm(piece: PieceChar, next: PieceChar[]) {
@@ -268,6 +311,7 @@ self.addEventListener('message', async (e: MessageEvent<InMsg>) => {
         ? msg.board.map(row => row.map(c => (c ? 1 : 0)))
         : emptyBoard()
       currentPiece = msg.piece
+      nextQueue = [...msg.next]
       await tryLoadWasm(msg.piece, msg.next)
       break
 
@@ -277,10 +321,11 @@ self.addEventListener('message', async (e: MessageEvent<InMsg>) => {
       break
 
     case 'requestMove': {
-      // sync board from engine if provided — prevents divergence
+      // sync board and next queue from engine if provided — prevents divergence
       if (msg.board) {
         jsBoard = msg.board.map(row => row.map(c => (c ? 1 : 0)))
       }
+      if (msg.next) nextQueue = [...msg.next]
       if (wasmBot) {
         const result = wasmBot.nextMove({})
         if (result) {
@@ -289,8 +334,10 @@ self.addEventListener('message', async (e: MessageEvent<InMsg>) => {
           break
         }
       }
-      // El-Tetris fallback
-      const { col, rot } = bestMove(jsBoard, currentPiece)
+      // El-Tetris with 2-piece lookahead when next piece is known
+      const { col, rot } = nextQueue[0]
+        ? bestMove2(jsBoard, currentPiece, nextQueue[0])
+        : bestMove(jsBoard, currentPiece)
       const actions = movesToPlace(currentPiece, rot, col)
       const minos = MINOS[currentPiece]?.[rot] ?? []
       const row = drop(jsBoard, minos, col)
@@ -304,6 +351,7 @@ self.addEventListener('message', async (e: MessageEvent<InMsg>) => {
     case 'reset':
       jsBoard = emptyBoard()
       currentPiece = msg.piece
+      nextQueue = [...msg.next]
       wasmBot = null
       await tryLoadWasm(msg.piece, msg.next)
       break

@@ -136,11 +136,12 @@ testris/                          ← 이 디렉토리 기준
 
 ### Phase 5 — vs-AI 모드 ✅ (핵심 완성)
 - `game/page.tsx`: 봇 1~3개 선택, 60fps RAF 루프, DAS/ARR, ESC 일시정지
-- `coldclear.worker.ts`: El-Tetris (Dellacherie 6가중치) 폴백 AI
+- `coldclear.worker.ts`: El-Tetris **2-piece lookahead** AI ✅ (2026-06-01 업그레이드)
   - Board sync: 매 수마다 실제 엔진 보드로 jsBoard 덮어씀 (발산 방지)
   - Center-bias: `3.5/unit` (El-Tetris 벽 이점 ~6.4점 극복)
-  - `BOT_THINK_MS = 100ms`
-  - ColdClear WASM: `/public/wasm/cold-clear.js` 존재 시 자동 우선 사용 (현재 파일 없음 → El-Tetris 폴백)
+  - `BOT_THINK_MS = 100ms` (2-ply 탐색: ~2300 evaluation, 100ms 내 충분)
+  - **2-piece lookahead**: `bestMove2()` — `eval(board_after_p1) + max(eval(board_after_p2))`
+  - ColdClear WASM: `/public/wasm/cold-clear.js` 존재 시 자동 우선 사용 (현재 파일 없음 → lookahead 폴백)
 - `BotPanel.tsx`: 봇 보드 렌더 + 봇 루프 (가비지 송수신)
 - 키: ← → 이동, ↑ 회전CW, Z/Ctrl 반시계, A 180도, Space 하드드롭, C 홀드, ESC 일시정지
 
@@ -212,12 +213,59 @@ vercel --prod
 
 ---
 
-### 🟡 선택: ColdClear WASM 업그레이드 (봇 강화)
+### 🟡 선택: ColdClear WASM 업그레이드 (봇 최강화)
 
-현재 El-Tetris 봇으로도 충분히 작동하지만, 더 강한 봇 원하면:
-1. [ColdClear WASM 빌드](https://github.com/MinusKelvin/cold-clear) 또는 미리 빌드된 파일 취득
-2. `testris/frontend/public/wasm/cold-clear.js` 와 `cold-clear_bg.wasm` 배치
-3. 자동으로 우선 사용됨 (worker 코드 변경 불필요)
+현재 El-Tetris **2-piece lookahead**로 업그레이드 완료 (2026-06-01).  
+더 강한 ColdClear WASM을 원하면 아래 수동 빌드 가이드 참조.
+
+- `coldclear.worker.ts`: `bestScore()` + `bestMove2()` 추가
+- `useBot.ts`: `requestMove(board, next)` 시그니처 확장
+- `BotPanel.tsx`: `requestMove` 호출 시 `eng.state.next` 전달
+- **중요**: ColdClear WASM 파일이 존재하면 여전히 자동 우선 사용됨
+
+#### ColdClear WASM 수동 빌드 가이드
+
+ColdClear는 prebuilt WASM을 배포하지 않음 (2024년 1월 아카이브). 직접 빌드 필요.
+
+**Step 1 — Rust + wasm-pack 설치**
+```bash
+# Rust 설치 (이미 있으면 skip)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup target add wasm32-unknown-unknown
+
+# wasm-pack 설치
+curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+```
+
+**Step 2 — ColdClear 소스 클론 및 브라우저 빌드**
+```bash
+git clone https://github.com/MinusKelvin/cold-clear
+cd cold-clear
+
+# browser 타깃으로 wasm-pack 빌드 (js 바인딩 포함)
+wasm-pack build --target web --out-dir pkg -- --features wasm
+```
+
+**Step 3 — 빌드 결과물 배치**
+```bash
+# 빌드 결과: cold-clear/pkg/ 디렉터리
+cp cold-clear/pkg/cold_clear.js   testris/frontend/public/wasm/cold-clear.js
+cp cold-clear/pkg/cold_clear_bg.wasm testris/frontend/public/wasm/cold-clear_bg.wasm
+```
+
+**Step 4 — API 호환성 확인**  
+worker가 기대하는 인터페이스:
+```typescript
+mod.BotHandle.create({}, piece, next)  // 생성
+wasmBot.addNextPiece(piece)             // 다음 피스 추가
+wasmBot.nextMove({})                    // → { inputs: string[], hold: bool }
+```
+빌드된 `cold-clear.js`가 이 API를 export하는지 확인. 이름이 다르면 worker의 `tryLoadWasm()` 수정 필요.
+
+**Step 5 — 배포**
+```bash
+cd testris/frontend && vercel --prod
+```
 
 ---
 
