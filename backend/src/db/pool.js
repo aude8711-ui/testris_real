@@ -2,13 +2,14 @@
 const { Pool } = require('pg')
 const config = require('../config')
 
-const isInternalHost = config.DATABASE_URL?.includes('.railway.internal')
+const dbUrl = config.DATABASE_URL || ''
+const isLocalDb = /localhost|127\.0\.0\.1/.test(dbUrl)
 const pool = new Pool({
   connectionString: config.DATABASE_URL,
   max: 20,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
-  ssl: (config.NODE_ENV === 'production' && !isInternalHost) ? { rejectUnauthorized: false } : false,
+  ssl: (config.NODE_ENV === 'production' && !isLocalDb) ? { rejectUnauthorized: false } : false,
 })
 
 pool.on('error', (err) => {

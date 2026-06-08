@@ -1,4 +1,4 @@
-# Testris — 진행 상황 (2026-06-01)
+# Testris — 진행 상황 (2026-06-08)
 
 ## 프로젝트 개요
 
@@ -14,17 +14,19 @@ TETR.IO에서 영감받은 브라우저 기반 1v1 PvP 테트리스 SaaS.
 | 레이어 | 선택 | 배포 |
 |--------|------|------|
 | Frontend | Next.js (App Router) + Zustand + NextAuth HS256 | Vercel |
-| Backend  | Node.js 20 + Express 5 + Socket.io 4 + PostgreSQL 16 | Railway |
+| Backend  | Node.js 20 + Express 5 + Socket.io 4 + PostgreSQL 16 | Render.com |
 | 결제 | Polar.sh ($9.99/mo) | 코드 완성 · 환경변수 미설정 |
 | AI 봇 | El-Tetris (Dellacherie 6가중치) — ColdClear WASM 업그레이드 경로 있음 | — |
 
 ---
 
-## 배포 URL (현재 라이브)
+## 배포 URL
 
-- **프론트엔드:** `https://frontend-rho-rust-62.vercel.app/game`
-- **백엔드:** `https://testris-backend-production.up.railway.app`
-- **헬스체크:** `https://testris-backend-production.up.railway.app/health` → `{"ok":true}`
+- **프론트엔드:** `https://frontend-rho-rust-62.vercel.app/game` ✅ 라이브
+- **백엔드 (Render):** `https://testris-backend.onrender.com` ← 배포 후 실제 URL로 교체
+- **헬스체크:** `https://<render-backend-url>/health` → `{"ok":true}`
+
+> **인프라 변경 (2026-06-08):** Railway 무료 체험 만료로 백엔드 오프라인. `render.yaml` Blueprint로 Render.com 무료 티어로 이전 중.
 
 ---
 
@@ -33,6 +35,7 @@ TETR.IO에서 영감받은 브라우저 기반 1v1 PvP 테트리스 SaaS.
 ```
 testris/                          ← 이 디렉토리 기준
 ├── PROGRESS.md                   ← 이 파일
+├── render.yaml                   ← Render Blueprint (backend + PostgreSQL)
 ├── README.md
 ├── docs/
 │   └── superpowers/plans/
@@ -160,6 +163,12 @@ testris/                          ← 이 디렉토리 기준
 - 뒤로가기 버튼 (Profile, Settings, vs AI 방)
 - Settings 페이지 재구성 (Controls + Handling 통합)
 
+### Phase 7 — 인프라 (Railway → Render) 🔄
+- `render.yaml` Blueprint: Web Service (`testris-backend`) + PostgreSQL (`testris-db`)
+- `backend/railway.json` 제거
+- `pool.js`: Railway 내부 호스트 체크 → 로컬 DB 제외 시 SSL 활성화 (Render 호환)
+- `package.json`: `prestart`로 배포 시 마이그레이션 자동 실행, `engines.node >= 20`
+
 ---
 
 ## 코드 검증 결과 (2026-06-01)
@@ -178,7 +187,14 @@ testris/                          ← 이 디렉토리 기준
 
 ## 현재 진행 중
 
-- 없음 (필수 버그 없음 — 색상 버그는 선택적 수정)
+### 백엔드 Render.com 마이그레이션 🔄
+- `render.yaml` Blueprint 생성 완료 (Web Service + PostgreSQL)
+- `backend/railway.json` 제거, `pool.js` SSL 로직 Render 호환으로 수정
+- `npm start` 시 `prestart`로 DB 마이그레이션 자동 실행
+- Render 대시보드 배포 + Vercel `NEXT_PUBLIC_BACKEND_URL` 업데이트 대기 중
+
+### PvP 멀티플레이어
+- 코드는 구현됨 (Socket.io 룸/매치메이킹) — **현재 스코프에서 스킵**
 
 ---
 
@@ -201,9 +217,9 @@ NEXT_PUBLIC_POLAR_CHECKOUT_URL=<복사한 체크아웃 URL>
 
 **Step 3 — Polar 웹훅 등록**
 - Polar 대시보드 → Developers → Webhooks → 새 웹훅
-- URL: `https://testris-backend-production.up.railway.app/webhooks/polar`
+- URL: `https://<render-backend-url>/webhooks/polar`
 - Events: `subscription.created`, `subscription.updated`, `subscription.revoked`, `subscription.canceled`
-- 시크릿 생성 → Railway 환경변수 `POLAR_WEBHOOK_SECRET` 에 설정
+- 시크릿 생성 → Render 환경변수 `POLAR_WEBHOOK_SECRET` 에 설정
 
 **Step 4 — 재배포**
 ```bash
@@ -290,13 +306,14 @@ cd testris/frontend && vercel --prod
 
 ## 환경변수 체크리스트
 
-### Backend (Railway)
+### Backend (Render.com)
 ```
-DATABASE_URL=postgresql://...            ✅ 설정됨 (Railway가 자동 제공)
-NEXTAUTH_SECRET=...                      ✅ 설정됨
-PORT=...                                 ✅ 설정됨
+DATABASE_URL=postgresql://...            ← Render PostgreSQL이 Blueprint로 자동 연결
+NODE_ENV=production
+PORT=4000
 FRONTEND_URL=https://frontend-rho-rust-62.vercel.app
-POLAR_WEBHOOK_SECRET=...                 ❌ 미설정 (Polar 연동 시 필요)
+NEXTAUTH_SECRET=7uXnRXHM8eByugIC4e0zFvwxfnY9MNntfP57bWwYWzQ=
+POLAR_WEBHOOK_SECRET=polar_whs_BJon4DAvuvCSaKBE6il8KB71T3gp82aycNr4Y2jSWsb
 POLAR_ACCESS_TOKEN=...                   ❌ 미설정 (선택)
 POLAR_PRODUCT_ID=...                     ❌ 미설정 (선택)
 ```
@@ -305,7 +322,7 @@ POLAR_PRODUCT_ID=...                     ❌ 미설정 (선택)
 ```
 NEXTAUTH_URL=https://frontend-rho-rust-62.vercel.app
 NEXTAUTH_SECRET=...                      ✅ 설정됨
-NEXT_PUBLIC_BACKEND_URL=https://testris-backend-production.up.railway.app
+NEXT_PUBLIC_BACKEND_URL=https://<render-backend-url>   ← Render 배포 후 업데이트 필요
 GOOGLE_CLIENT_ID=...                     ✅ 설정됨
 GOOGLE_CLIENT_SECRET=...                 ✅ 설정됨
 NEXT_PUBLIC_POLAR_CHECKOUT_URL=...       ❌ 미설정 ← 이것만 추가하면 결제 완성
@@ -331,8 +348,9 @@ npm run dev            # localhost:3000
 ```
 
 **가장 빠른 완성 경로:**  
-1. Polar에서 체크아웃 URL 발급 (5분)  
-2. Vercel에 `NEXT_PUBLIC_POLAR_CHECKOUT_URL` 추가 (2분)  
-3. Polar 웹훅 등록 + Railway에 `POLAR_WEBHOOK_SECRET` 설정 (5분)  
-4. `vercel --prod` 재배포 (2분)  
-→ **총 약 15분으로 완전한 SaaS 완성**
+1. Render 백엔드 배포 + Vercel `NEXT_PUBLIC_BACKEND_URL` 업데이트 (10분)  
+2. Polar에서 체크아웃 URL 발급 (5분)  
+3. Vercel에 `NEXT_PUBLIC_POLAR_CHECKOUT_URL` 추가 (2분)  
+4. Polar 웹훅 등록 + Render에 `POLAR_WEBHOOK_SECRET` 설정 (5분)  
+5. `vercel --prod` 재배포 (2분)  
+→ **총 약 25분으로 완전한 SaaS 완성**

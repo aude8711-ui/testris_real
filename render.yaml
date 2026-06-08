@@ -1,0 +1,28 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: testris-backend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: testris-db
+          property: connectionString
+      # Set these manually in the Render dashboard (Secrets):
+      # FRONTEND_URL, NEXTAUTH_SECRET, POLAR_WEBHOOK_SECRET
+
+databases:
+  - name: testris-db
+    plan: free
+    databaseName: testris
+    user: testris
