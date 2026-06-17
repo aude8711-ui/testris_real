@@ -20,13 +20,18 @@ TETR.IO에서 영감받은 브라우저 기반 1v1 PvP 테트리스 SaaS.
 
 ---
 
+## 저장소
+
+- **GitHub:** https://github.com/aude8711-ui/testris_real (main 브랜치 = 구 계정 feat/build)
+
 ## 배포 URL
 
-- **프론트엔드:** `https://frontend-rho-rust-62.vercel.app/game` ✅ 라이브
-- **백엔드 (Render):** `https://testris-backend.onrender.com` ← 배포 후 실제 URL로 교체
-- **헬스체크:** `https://<render-backend-url>/health` → `{"ok":true}`
+- **프론트엔드:** `https://frontend-rho-rust-62.vercel.app/game` ← 구 계정, 신규 Vercel 프로젝트 생성 후 교체 필요
+- **백엔드 (Render):** `https://testris-backend.onrender.com` ← 구 계정, 신규 Railway 프로젝트 생성 후 교체 필요
+- **헬스체크:** `https://<railway-backend-url>/health` → `{"ok":true}`
 
 > **인프라 변경 (2026-06-08):** Railway 무료 체험 만료로 백엔드 오프라인. `render.yaml` Blueprint로 Render.com 무료 티어로 이전 중.
+> **계정 마이그레이션 (2026-06-17):** 구 GitHub 계정(`sinuig271-cmyk`)·Vercel·Railway 체험 종료로 새 계정(`aude8711-ui`)으로 이전. 저장소는 `testris_real`로 새로 생성, `feat/build` → `main`으로 push 완료. Vercel/Railway 프로젝트는 신규 계정에서 재생성 필요 (이 저장소 연결, root dir: frontend/backend). 기존에 커밋된 `NEXTAUTH_SECRET`/`POLAR_WEBHOOK_SECRET` 값은 노출된 것으로 간주하고 신규 환경에서는 새로 생성할 것.
 
 ---
 
