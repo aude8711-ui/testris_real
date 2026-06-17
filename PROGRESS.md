@@ -317,8 +317,8 @@ DATABASE_URL=postgresql://...            ← Render PostgreSQL이 Blueprint로 �
 NODE_ENV=production
 PORT=4000
 FRONTEND_URL=https://frontend-rho-rust-62.vercel.app
-NEXTAUTH_SECRET=7uXnRXHM8eByugIC4e0zFvwxfnY9MNntfP57bWwYWzQ=
-POLAR_WEBHOOK_SECRET=polar_whs_BJon4DAvuvCSaKBE6il8KB71T3gp82aycNr4Y2jSWsb
+NEXTAUTH_SECRET=<SET IN DASHBOARD>
+POLAR_WEBHOOK_SECRET=<SET IN DASHBOARD>
 POLAR_ACCESS_TOKEN=...                   ❌ 미설정 (선택)
 POLAR_PRODUCT_ID=...                     ❌ 미설정 (선택)
 ```
