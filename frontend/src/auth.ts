@@ -25,24 +25,33 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   callbacks: {
     async signIn({ user, account }) {
       if (!account?.providerAccountId || !user.email) return false
-      const res = await fetch(`${process.env.BACKEND_URL}/auth/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          google_id: account.providerAccountId,
-          email: user.email,
-        }),
-      })
-      if (!res.ok) return false
-      const data = await res.json()
-      Object.assign(user, {
-        id: data.id,
-        is_paid: data.is_paid,
-        is_admin: data.is_admin,
-        guest_tag: data.guest_tag,
-        nickname: data.nickname,
-      })
-      return true
+      const url = `${process.env.BACKEND_URL}/auth/sync`
+      console.error('[auth] BACKEND_URL =', process.env.BACKEND_URL)
+      console.error('[auth] calling', url)
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            google_id: account.providerAccountId,
+            email: user.email,
+          }),
+        })
+        console.error('[auth] /auth/sync status', res.status)
+        if (!res.ok) return false
+        const data = await res.json()
+        Object.assign(user, {
+          id: data.id,
+          is_paid: data.is_paid,
+          is_admin: data.is_admin,
+          guest_tag: data.guest_tag,
+          nickname: data.nickname,
+        })
+        return true
+      } catch (err) {
+        console.error('[auth] /auth/sync threw', err)
+        return false
+      }
     },
     async jwt({ token, user }) {
       if (user) {
