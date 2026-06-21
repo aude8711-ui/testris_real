@@ -1,6 +1,7 @@
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { KonamiEasterEgg } from '@/components/KonamiEasterEgg'
 
 export default async function PlayPage() {
   const session = await auth()
@@ -8,6 +9,7 @@ export default async function PlayPage() {
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center gap-8">
+      <KonamiEasterEgg />
       <h1 className="text-3xl font-bold text-white">Choose Mode</h1>
       <div className="flex gap-4">
         <ModeCard href="/game"           title="vs AI"       desc="Practice against ColdClear bot" />
