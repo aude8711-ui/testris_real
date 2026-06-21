@@ -10,7 +10,7 @@ export interface ActivePiece {
   col: number
 }
 
-export interface GarbageChunk { lines: number; col: number }
+export interface GarbageChunk { lines: number; col: number; age: number }
 
 export interface GameState {
   board: GameBoard
@@ -40,6 +40,7 @@ const VISIBLE_ROWS = 20   // rows rendered to the player
 const BOARD_COLS = 10
 const NEXT_COUNT = 5
 const SPAWN_ROW = 20      // spawn in buffer zone, just above visible area
+const GARBAGE_DELAY_PIECES = 2  // pieces a chunk waits (still cancelable) before it rises; may bump to 3 after playtesting
 
 function emptyBoard(): GameBoard {
   return Array.from({ length: BOARD_ROWS }, () => Array(BOARD_COLS).fill(null))
@@ -200,11 +201,17 @@ export class GameEngine {
         toAbsorb = 0
       }
     }
-    // remaining garbage always rises at lock time
+    // age remaining garbage; chunks that have waited long enough rise now
+    const stillQueued: GarbageChunk[] = []
     for (const chunk of this.state.garbageQueue) {
-      this.addGarbage(chunk.lines, chunk.col)
+      const aged = { ...chunk, age: chunk.age + 1 }
+      if (aged.age >= GARBAGE_DELAY_PIECES) {
+        this.addGarbage(aged.lines, aged.col)
+      } else {
+        stillQueued.push(aged)
+      }
     }
-    this.state.garbageQueue = []
+    this.state.garbageQueue = stillQueued
 
     const allClear = board.slice(0, VISIBLE_ROWS).every(row => row.every(c => c === null))
     const isB2bMove = cleared.length === 4 || (tSpin !== 'none' && cleared.length > 0)
@@ -248,7 +255,7 @@ export class GameEngine {
 
   receiveGarbage(lines: number) {
     const col = Math.floor(Math.random() * BOARD_COLS)
-    this.state.garbageQueue.push({ lines, col })
+    this.state.garbageQueue.push({ lines, col, age: 0 })
   }
 
   private detectSpin(piece: ActivePiece): 'none' | 'mini' | 'full' {
