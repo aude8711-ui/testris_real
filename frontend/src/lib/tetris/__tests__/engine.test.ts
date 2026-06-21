@@ -40,6 +40,27 @@ test('Lock Out: partial visible-board fill does NOT trigger topOut', () => {
   eng.hardDrop()
   expect(eng.state.topOut).toBe(false)
 })
+// Bug 2: garbage overflow — rising garbage must trigger topOut instead of
+// silently discarding real blocks pushed off the top of the board
+test('Garbage overflow: topOut triggers instead of silently discarding the top row', () => {
+  const eng = new GameEngine(42)
+  // simulate a stack that already reaches the very top buffer row
+  eng.state.board[23] = Array(10).fill('I' as PieceType)
+  eng.receiveGarbage(1)
+  eng.state.garbageQueue[0].age = 99 // force it to rise on the next lock
+  eng.hardDrop() // lockPiece() ages the queue and tries to add the garbage row
+  expect(eng.state.topOut).toBe(true)
+  expect(eng.state.board[23].some(c => c === 'I')).toBe(true) // not silently wiped
+})
+
+test('Garbage overflow: an empty top row is still discarded normally (no false topOut)', () => {
+  const eng = new GameEngine(42)
+  eng.receiveGarbage(1)
+  eng.state.garbageQueue[0].age = 99
+  eng.hardDrop()
+  expect(eng.state.topOut).toBe(false)
+})
+
 test('move left/right shifts column', () => {
   const eng = new GameEngine(42)
   const col = eng.state.active!.col

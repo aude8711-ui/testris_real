@@ -246,6 +246,15 @@ export class GameEngine {
 
   private addGarbage(lines: number, col: number) {
     for (let i = 0; i < lines; i++) {
+      if (this.state.topOut) return
+      // a real block being pushed off the top means the stack has overflowed
+      // the board entirely — that's a Lock Out, not something to discard silently
+      const overflow = this.state.board[this.state.board.length - 1]
+      if (overflow.some(cell => cell !== null)) {
+        this.state.topOut = true
+        this.state.active = null
+        return
+      }
       const row: (PieceType | null)[] = Array(BOARD_COLS).fill('G' as PieceType)
       row[col] = null
       this.state.board.unshift(row)
