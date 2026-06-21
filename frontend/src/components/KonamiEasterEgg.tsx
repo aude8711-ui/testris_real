@@ -2,10 +2,12 @@
 import { useEffect, useRef, useState } from 'react'
 
 const SEQUENCE = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a']
+const INTRO_MS = 1500 // slow, stationary grow-in so the face is clearly visible
 const CHAOS_MS = 7000
 const FADE_MS = 500
-const SIZE = 160
-const GROW_MS = 300
+const SIZE = 240 // 1.5x the original 160
+
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3)
 
 interface MotionState {
   x: number
@@ -54,45 +56,51 @@ export function KonamiEasterEgg() {
     setFading(false)
     setActive(true)
 
-    stateRef.current = {
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-      vx: (Math.random() < 0.5 ? -1 : 1) * (6 + Math.random() * 6),
-      vy: (Math.random() < 0.5 ? -1 : 1) * (6 + Math.random() * 6),
-      scale: 0,
-      rotation: 0,
-    }
+    const cx = window.innerWidth / 2
+    const cy = window.innerHeight / 2
+    stateRef.current = { x: cx, y: cy, vx: 0, vy: 0, scale: 0, rotation: 0 }
 
     const start = performance.now()
     const maxSpeed = 16
+    let chaosStarted = false
 
     const tick = (now: number) => {
       const elapsed = now - start
       const st = stateRef.current
 
-      // chaotic DVD-logo bounce: random jitter on top of the base velocity, clamped
-      st.vx += (Math.random() - 0.5) * 1.8
-      st.vy += (Math.random() - 0.5) * 1.8
-      const speed = Math.hypot(st.vx, st.vy)
-      if (speed > maxSpeed) {
-        st.vx = (st.vx / speed) * maxSpeed
-        st.vy = (st.vy / speed) * maxSpeed
-      }
-      st.x += st.vx
-      st.y += st.vy
-
-      const half = (SIZE * Math.max(st.scale, 0.05)) / 2
-      if (st.x - half < 0) { st.x = half; st.vx = Math.abs(st.vx) }
-      if (st.x + half > window.innerWidth) { st.x = window.innerWidth - half; st.vx = -Math.abs(st.vx) }
-      if (st.y - half < 0) { st.y = half; st.vy = Math.abs(st.vy) }
-      if (st.y + half > window.innerHeight) { st.y = window.innerHeight - half; st.vy = -Math.abs(st.vy) }
-
-      st.rotation += 12 + (Math.random() - 0.5) * 8
-
-      if (elapsed < GROW_MS) {
-        st.scale = elapsed / GROW_MS
+      if (elapsed < INTRO_MS) {
+        // mostly stationary, smooth slow grow-in centered on screen
+        st.scale = easeOutCubic(elapsed / INTRO_MS)
+        st.x = cx
+        st.y = cy
+        st.rotation = 0
       } else {
-        st.scale = 1 + Math.sin(elapsed / 60) * 0.25 + (Math.random() - 0.5) * 0.15
+        if (!chaosStarted) {
+          chaosStarted = true
+          st.vx = (Math.random() < 0.5 ? -1 : 1) * (6 + Math.random() * 6)
+          st.vy = (Math.random() < 0.5 ? -1 : 1) * (6 + Math.random() * 6)
+        }
+        const chaosElapsed = elapsed - INTRO_MS
+
+        // chaotic DVD-logo bounce: random jitter on top of the base velocity, clamped
+        st.vx += (Math.random() - 0.5) * 1.8
+        st.vy += (Math.random() - 0.5) * 1.8
+        const speed = Math.hypot(st.vx, st.vy)
+        if (speed > maxSpeed) {
+          st.vx = (st.vx / speed) * maxSpeed
+          st.vy = (st.vy / speed) * maxSpeed
+        }
+        st.x += st.vx
+        st.y += st.vy
+
+        const half = (SIZE * Math.max(st.scale, 0.05)) / 2
+        if (st.x - half < 0) { st.x = half; st.vx = Math.abs(st.vx) }
+        if (st.x + half > window.innerWidth) { st.x = window.innerWidth - half; st.vx = -Math.abs(st.vx) }
+        if (st.y - half < 0) { st.y = half; st.vy = Math.abs(st.vy) }
+        if (st.y + half > window.innerHeight) { st.y = window.innerHeight - half; st.vy = -Math.abs(st.vy) }
+
+        st.rotation += 12 + (Math.random() - 0.5) * 8
+        st.scale = 1 + Math.sin(chaosElapsed / 60) * 0.25 + (Math.random() - 0.5) * 0.15
       }
 
       if (imgRef.current) {
@@ -100,7 +108,7 @@ export function KonamiEasterEgg() {
           `translate(${st.x - SIZE / 2}px, ${st.y - SIZE / 2}px) scale(${Math.max(st.scale, 0.05)}) rotate(${st.rotation}deg)`
       }
 
-      if (elapsed < CHAOS_MS) {
+      if (elapsed < INTRO_MS + CHAOS_MS) {
         rafRef.current = requestAnimationFrame(tick)
       } else {
         setFading(true)

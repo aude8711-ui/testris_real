@@ -10,6 +10,14 @@ export default async function PlayPage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center gap-8">
       <KonamiEasterEgg />
+      {/* eslint-disable-next-line @next/next/no-img-element -- tiny decorative easter egg, not worth next/image overhead */}
+      <img
+        src="/easter-triangle.png"
+        alt=""
+        width={48}
+        height={48}
+        className="fixed bottom-4 right-4 w-12 h-12 opacity-[0.05] pointer-events-none select-none"
+      />
       <h1 className="text-3xl font-bold text-white">Choose Mode</h1>
       <div className="flex gap-4">
         <ModeCard href="/game"           title="vs AI"       desc="Practice against ColdClear bot" />
