@@ -15,7 +15,7 @@ interface Props {
   running: boolean
   label: string
   onTopOut: () => void
-  onAttack?: (lines: number) => void
+  onAttack?: (lines: number, cancelled: number) => void
 }
 
 export function BotPanel({ engine, cellSize, running, label, onTopOut, onAttack }: Props) {
@@ -89,8 +89,9 @@ export function BotPanel({ engine, cellSize, running, label, onTopOut, onAttack 
 
       if (eng.state.lastLock !== lastLockRef.current) {
         lastLockRef.current = eng.state.lastLock
-        const attack = calculateAttack(eng.state.lastLock!)
-        if (attack > 0) onAttackRef.current?.(attack)
+        const lock = eng.state.lastLock!
+        const attack = calculateAttack(lock)
+        onAttackRef.current?.(attack, lock.garbageCancelled)
       }
 
       if (botActionsRef.current.length === 0) {

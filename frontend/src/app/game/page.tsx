@@ -10,10 +10,15 @@ import { NextQueue } from '@/components/game/NextQueue'
 import { HoldPiece } from '@/components/game/HoldPiece'
 import { BotPanel } from '@/components/game/BotPanel'
 import { applyAction } from '@/lib/tetris/actions'
+import { DebugOverlay, type SideStats } from '@/components/game/DebugOverlay'
+import { AttackFloaters, pruneFloaters, type Floater } from '@/components/game/AttackFloaters'
 
 const GRAVITY_MS = 800
 const BOT_CELL: Record<number, number> = { 1: 30, 2: 16, 3: 10 }
 const DAS_ACTIONS = new Set(['move_left', 'move_right'])
+
+interface Tally { sent: number; received: number; cancelled: number }
+function emptyTally(): Tally { return { sent: 0, received: 0, cancelled: 0 } }
 
 type Phase = 'config' | 'playing'
 
@@ -25,7 +30,17 @@ export default function GamePage() {
   const [won, setWon] = useState(false)
   const [paused, setPaused] = useState(false)
   const [gameKey, setGameKey] = useState(0)
+  const [debugOn, setDebugOn] = useState(false)
   const botsDeadRef = useRef(0)
+  const tallyRef = useRef<Record<string, Tally>>({
+    player: emptyTally(), bot0: emptyTally(), bot1: emptyTally(), bot2: emptyTally(),
+  })
+  const floatersRef = useRef<Floater[]>([])
+  const floaterIdRef = useRef(0)
+  const pushFloater = useCallback((side: string, value: number) => {
+    floaterIdRef.current += 1
+    floatersRef.current = [...floatersRef.current, { id: floaterIdRef.current, side, value, createdAt: Date.now() }]
+  }, [])
   const engineRef = useRef<GameEngine | null>(null)
   const bindings = useRef(loadBindings())
   const handling = useRef(loadHandling())
@@ -57,18 +72,28 @@ export default function GamePage() {
     if (!eng || !eng.state.lastLock) return
     if (eng.state.lastLock === lastLockRef.current) return
     lastLockRef.current = eng.state.lastLock
-    const attack = calculateAttack(eng.state.lastLock)
+    const lock = eng.state.lastLock
+    const attack = calculateAttack(lock)
+    tallyRef.current.player.cancelled += lock.garbageCancelled
     if (attack <= 0) return
+    tallyRef.current.player.sent += attack
+    pushFloater('player', attack)
     for (let i = 0; i < botCount; i++) {
       botEngineRefs[i].current?.receiveGarbage(attack)
+      tallyRef.current[`bot${i}`].received += attack
     }
   }
   function checkPlayerAttack() { checkPlayerAttackRef.current() }
 
   // Bot sends garbage to player
-  const handleBotAttack = useCallback((lines: number) => {
+  const handleBotAttack = useCallback((botIndex: number, lines: number, cancelled: number) => {
+    tallyRef.current[`bot${botIndex}`].cancelled += cancelled
+    if (lines <= 0) return
+    tallyRef.current[`bot${botIndex}`].sent += lines
+    pushFloater(`bot${botIndex}`, lines)
     engineRef.current?.receiveGarbage(lines)
-  }, [])
+    tallyRef.current.player.received += lines
+  }, [pushFloater])
 
   function startGame() {
     const seed = Date.now()
@@ -78,6 +103,8 @@ export default function GamePage() {
     }
     lastLockRef.current = null
     botsDeadRef.current = 0
+    tallyRef.current = { player: emptyTally(), bot0: emptyTally(), bot1: emptyTally(), bot2: emptyTally() }
+    floatersRef.current = []
     setGameKey(k => k + 1)
     setGameOver(false)
     setWon(false)
@@ -189,6 +216,26 @@ export default function GamePage() {
   const isOver = gameOver || won
   const running = phase === 'playing' && !isOver && !paused
 
+  // Debug overlay derives everything from real engine state / calculateAttack
+  // results already tallied above — no separate damage math here.
+  floatersRef.current = pruneFloaters(floatersRef.current, Date.now())
+  const debugSides: SideStats[] = phase === 'playing'
+    ? [
+        {
+          label: '나 (Player)',
+          ...tallyRef.current.player,
+          combo: eng?.state.combo ?? 0,
+          b2b: eng?.state.b2b ?? 0,
+        },
+        ...Array.from({ length: botCount }, (_, i) => ({
+          label: `Bot ${i + 1}`,
+          ...tallyRef.current[`bot${i}`],
+          combo: botEngineRefs[i].current?.state.combo ?? 0,
+          b2b: botEngineRefs[i].current?.state.b2b ?? 0,
+        })),
+      ]
+    : []
+
   if (phase === 'config') {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center gap-8 text-white">
@@ -232,9 +279,10 @@ export default function GamePage() {
         {/* Player panel */}
         <div className="flex gap-3 items-start">
           {eng && <HoldPiece type={eng.state.hold} used={eng.state.holdUsed} />}
-          <div className="flex flex-col items-center gap-2">
+          <div className="relative flex flex-col items-center gap-2">
             <div className="text-sm text-white/40">나 · 줄: {eng?.state.linesCleared ?? 0}</div>
             {eng && <GameBoard state={eng.state} ghostRow={eng.getGhostRow()} />}
+            <AttackFloaters floaters={floatersRef.current} side="player" />
           </div>
           {eng && <NextQueue pieces={eng.state.next} />}
         </div>
@@ -242,18 +290,31 @@ export default function GamePage() {
         {/* Bot panels */}
         <div className="flex flex-col gap-4 justify-center" style={{ height: 20 * 32 }}>
           {Array.from({ length: botCount }, (_, i) => (
-            <BotPanel
-              key={`${gameKey}-${i}`}
-              engine={botEngineRefs[i].current!}
-              cellSize={BOT_CELL[botCount]}
-              running={running}
-              label={`Bot ${i + 1}`}
-              onTopOut={handleBotTopOut}
-              onAttack={handleBotAttack}
-            />
+            <div key={`${gameKey}-${i}`} className="relative">
+              <BotPanel
+                engine={botEngineRefs[i].current!}
+                cellSize={BOT_CELL[botCount]}
+                running={running}
+                label={`Bot ${i + 1}`}
+                onTopOut={handleBotTopOut}
+                onAttack={(lines, cancelled) => handleBotAttack(i, lines, cancelled)}
+              />
+              <AttackFloaters floaters={floatersRef.current} side={`bot${i}`} />
+            </div>
           ))}
         </div>
       </div>
+
+      {/* Debug overlay toggle */}
+      {phase === 'playing' && (
+        <button
+          onClick={() => setDebugOn(d => !d)}
+          className="fixed top-4 right-4 z-50 px-2 py-1 text-xs rounded border border-white/20 bg-black/60 text-white/70 hover:bg-black/80"
+        >
+          Debug: {debugOn ? 'ON' : 'OFF'}
+        </button>
+      )}
+      {debugOn && <DebugOverlay sides={debugSides} />}
 
       {/* Pause overlay */}
       {paused && !isOver && (

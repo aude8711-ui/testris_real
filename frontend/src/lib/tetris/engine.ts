@@ -33,6 +33,7 @@ export interface LockResult {
   combo: number
   b2b: number   // B2B count before this lock (0 = no B2B active)
   surge: number // B2B Surge lines fired this lock (> 0 when B2B chain ≥ 4 breaks)
+  garbageCancelled: number // queued incoming garbage lines cancelled by this lock's clear
 }
 
 const BOARD_ROWS = 24      // 20 visible rows + 4 buffer rows above (rows 20-23)
@@ -172,7 +173,7 @@ export class GameEngine {
     if (!anyInBoard) {
       this.state.topOut = true
       this.state.active = null
-      const result: LockResult = { linesCleared: 0, tSpin: 'none', allClear: false, combo: 0, b2b: this.state.b2b, surge: 0 }
+      const result: LockResult = { linesCleared: 0, tSpin: 'none', allClear: false, combo: 0, b2b: this.state.b2b, surge: 0, garbageCancelled: 0 }
       this.state.lastLock = result
       return result
     }
@@ -201,6 +202,7 @@ export class GameEngine {
         toAbsorb = 0
       }
     }
+    const garbageCancelled = cleared.length - toAbsorb
     // age remaining garbage; chunks that have waited long enough rise now
     const stillQueued: GarbageChunk[] = []
     for (const chunk of this.state.garbageQueue) {
@@ -230,7 +232,7 @@ export class GameEngine {
     this.state.combo = combo
     this.state.linesCleared += cleared.length
 
-    const result: LockResult = { linesCleared: cleared.length, tSpin, allClear, combo, b2b: prevB2b, surge }
+    const result: LockResult = { linesCleared: cleared.length, tSpin, allClear, combo, b2b: prevB2b, surge, garbageCancelled }
     this.state.lastLock = result
 
     this.spawnNext()
