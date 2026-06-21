@@ -1,12 +1,13 @@
 // ColdClear WASM Web Worker
 // Tries to load ColdClear WASM; falls back to El-Tetris (Dellacherie) bot.
 
-type PieceChar = 'I' | 'O' | 'T' | 'S' | 'Z' | 'J' | 'L' | 'G'
+import { PIECES, PieceType } from '../tetris/pieces'
+import { getKicks } from '../tetris/rotation'
 
-interface InitMsg  { type: 'init';       piece: PieceChar; next: PieceChar[]; board?: number[][] }
-interface AddMsg   { type: 'addPiece';   piece: PieceChar }
-interface ReqMsg   { type: 'requestMove'; board?: number[][]; next?: PieceChar[] }
-interface ResetMsg { type: 'reset';      piece: PieceChar; next: PieceChar[] }
+interface InitMsg  { type: 'init';       piece: PieceType; next: PieceType[]; board?: number[][] }
+interface AddMsg   { type: 'addPiece';   piece: PieceType }
+interface ReqMsg   { type: 'requestMove'; board?: number[][]; next?: PieceType[] }
+interface ResetMsg { type: 'reset';      piece: PieceType; next: PieceType[] }
 type InMsg = InitMsg | AddMsg | ReqMsg | ResetMsg
 
 const CC_TO_ACTION: Record<string, string> = {
@@ -20,53 +21,6 @@ const CC_TO_ACTION: Record<string, string> = {
   'Hold':                     'hold',
 }
 
-// Mino data must match engine PIECES exactly
-const MINOS: Record<PieceChar, [number, number][][]> = {
-  I: [
-    [[1,0],[1,1],[1,2],[1,3]],
-    [[0,1],[1,1],[2,1],[3,1]],
-    [[2,0],[2,1],[2,2],[2,3]],
-    [[0,2],[1,2],[2,2],[3,2]],
-  ],
-  O: [
-    [[0,1],[0,2],[1,1],[1,2]],
-    [[0,1],[0,2],[1,1],[1,2]],
-    [[0,1],[0,2],[1,1],[1,2]],
-    [[0,1],[0,2],[1,1],[1,2]],
-  ],
-  T: [
-    [[0,0],[0,1],[0,2],[1,1]],
-    [[0,0],[1,0],[1,1],[2,0]],
-    [[1,1],[2,0],[2,1],[2,2]],
-    [[0,2],[1,1],[1,2],[2,2]],
-  ],
-  S: [
-    [[0,0],[0,1],[1,1],[1,2]],
-    [[0,1],[1,0],[1,1],[2,0]],
-    [[1,0],[1,1],[2,1],[2,2]],
-    [[0,2],[1,1],[1,2],[2,1]],
-  ],
-  Z: [
-    [[0,1],[0,2],[1,0],[1,1]],
-    [[0,0],[1,0],[1,1],[2,1]],
-    [[1,1],[1,2],[2,0],[2,1]],
-    [[0,1],[1,1],[1,2],[2,2]],
-  ],
-  J: [
-    [[0,0],[0,1],[0,2],[1,0]],
-    [[0,0],[1,0],[2,0],[2,1]],
-    [[1,2],[2,0],[2,1],[2,2]],
-    [[0,1],[0,2],[1,2],[2,2]],
-  ],
-  L: [
-    [[0,0],[0,1],[0,2],[1,2]],
-    [[0,0],[0,1],[1,0],[2,0]],
-    [[1,0],[2,0],[2,1],[2,2]],
-    [[0,2],[1,2],[2,1],[2,2]],
-  ],
-  G: [[[0,0]]],
-}
-
 const COLS = 10
 const ROWS = 20
 
@@ -76,7 +30,7 @@ function emptyBoard(): Board {
   return Array.from({ length: ROWS }, () => Array(COLS).fill(0))
 }
 
-function fits(board: Board, minos: [number, number][], row: number, col: number): boolean {
+function fits(board: Board, minos: number[][], row: number, col: number): boolean {
   for (const [dr, dc] of minos) {
     const r = row + dr, c = col + dc
     if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return false
@@ -85,7 +39,7 @@ function fits(board: Board, minos: [number, number][], row: number, col: number)
   return true
 }
 
-function drop(board: Board, minos: [number, number][], col: number): number {
+function drop(board: Board, minos: number[][], col: number): number {
   const drs = minos.map(([dr]) => dr)
   const maxDr = Math.max(...drs)
   const minDr = Math.min(...drs)
@@ -101,7 +55,7 @@ interface PlaceResult {
   landingRow: number   // highest row index among placed minos (before clearing)
 }
 
-function place(board: Board, minos: [number, number][], row: number, col: number): PlaceResult {
+function place(board: Board, minos: number[][], row: number, col: number): PlaceResult {
   const b = board.map(r => [...r])
   let landingRow = 0
 
@@ -197,11 +151,11 @@ function elTetris(board: Board, landingRow: number, linesCleared: number, erased
   )
 }
 
-function bestMove(board: Board, type: PieceChar): { col: number; rot: number } {
-  const rotations = MINOS[type]?.length ?? 1
+function bestMove(board: Board, type: PieceType): { col: number; rot: number } {
+  const rotations = PIECES[type]?.length ?? 1
   let best = -Infinity, bestCol = 0, bestRot = 0
   for (let rot = 0; rot < rotations; rot++) {
-    const minos = MINOS[type]?.[rot] ?? []
+    const minos = PIECES[type]?.[rot] ?? []
     const dcVals = minos.map(([, dc]) => dc)
     const pieceCenter = (Math.min(...dcVals) + Math.max(...dcVals)) / 2
     for (let col = -2; col < COLS + 2; col++) {
@@ -218,11 +172,11 @@ function bestMove(board: Board, type: PieceChar): { col: number; rot: number } {
 }
 
 // Returns the best El-Tetris score achievable for `type` on `board` (any placement).
-function bestScore(board: Board, type: PieceChar): number {
-  const rotations = MINOS[type]?.length ?? 1
+function bestScore(board: Board, type: PieceType): number {
+  const rotations = PIECES[type]?.length ?? 1
   let best = -Infinity
   for (let rot = 0; rot < rotations; rot++) {
-    const minos = MINOS[type]?.[rot] ?? []
+    const minos = PIECES[type]?.[rot] ?? []
     const dcVals = minos.map(([, dc]) => dc)
     const pieceCenter = (Math.min(...dcVals) + Math.max(...dcVals)) / 2
     for (let col = -2; col < COLS + 2; col++) {
@@ -239,11 +193,11 @@ function bestScore(board: Board, type: PieceChar): number {
 
 // 2-piece lookahead: picks the placement of `type` that maximises
 // eval(board_after_type) + best_eval(board_after_nextType).
-function bestMove2(board: Board, type: PieceChar, nextType: PieceChar): { col: number; rot: number } {
-  const rotations = MINOS[type]?.length ?? 1
+function bestMove2(board: Board, type: PieceType, nextType: PieceType): { col: number; rot: number } {
+  const rotations = PIECES[type]?.length ?? 1
   let best = -Infinity, bestCol = 0, bestRot = 0
   for (let rot = 0; rot < rotations; rot++) {
-    const minos = MINOS[type]?.[rot] ?? []
+    const minos = PIECES[type]?.[rot] ?? []
     const dcVals = minos.map(([, dc]) => dc)
     const pieceCenter = (Math.min(...dcVals) + Math.max(...dcVals)) / 2
     for (let col = -2; col < COLS + 2; col++) {
@@ -259,25 +213,46 @@ function bestMove2(board: Board, type: PieceChar, nextType: PieceChar): { col: n
   return { col: bestCol, rot: bestRot }
 }
 
-// At spawn (row=17, col=3), SRS kick shifts I-piece vertical rotations:
-//   rot=1 (CW):  kick [+1,-2] → actual col = 4
-//   rot=3 (CCW): kick [-1,-2] → actual col = 2
-// All other pieces / rotations: no kick at spawn, col stays 3.
-function spawnColAfterRotation(type: PieceChar, rot: number): number {
-  if (type !== 'I') return 3
-  if (rot === 1) return 4
-  if (rot === 3) return 2
-  return 3
+// engine.ts spawnPiece(): { rotation: 0, row: SPAWN_ROW, col: SPAWN_COL }
+const SPAWN_ROW = 20
+const SPAWN_COL = 3
+
+// Column bounds only — the spawn row sits in the buffer zone above the
+// tracked board, so the only way a kick can fail there is running off
+// the left/right edge (mirrors rotation.ts's fitsOnBoard, minus the
+// out-of-tracked-board row case which can't collide with anything).
+function fitsAtSpawn(board: Board, minos: number[][], row: number, col: number): boolean {
+  for (const [dr, dc] of minos) {
+    const r = row + dr, c = col + dc
+    if (c < 0 || c >= COLS) return false
+    if (r >= 0 && r < ROWS && board[r][c]) return false
+  }
+  return true
 }
 
-function movesToPlace(type: PieceChar, targetRot: number, targetCol: number): string[] {
+// Predicts the column the real engine's tryRotate (rotation.ts) lands on when
+// rotating straight from spawn (rotation 0, col SPAWN_COL) to targetRot, by
+// walking the same kick table it uses. Keeps this in lockstep with the real
+// engine — no more hardcoded per-piece offsets to drift out of sync.
+function spawnColAfterRotation(board: Board, type: PieceType, targetRot: number): number {
+  if (targetRot === 0) return SPAWN_COL
+  const kicks = getKicks(type, 0, targetRot)
+  for (const [dc, dr] of kicks) {
+    const col = SPAWN_COL + dc
+    const row = SPAWN_ROW + dr
+    if (fitsAtSpawn(board, PIECES[type][targetRot], row, col)) return col
+  }
+  return SPAWN_COL
+}
+
+function movesToPlace(board: Board, type: PieceType, targetRot: number, targetCol: number): string[] {
   const actions: string[] = []
   const rotDiff = (targetRot + 4) % 4
   if (rotDiff === 1) actions.push('rotate_cw')
   else if (rotDiff === 2) actions.push('rotate_180')
   else if (rotDiff === 3) actions.push('rotate_ccw')
 
-  const dc = targetCol - spawnColAfterRotation(type, targetRot)
+  const dc = targetCol - spawnColAfterRotation(board, type, targetRot)
   for (let i = 0; i < Math.abs(dc); i++) {
     actions.push(dc > 0 ? 'move_right' : 'move_left')
   }
@@ -286,11 +261,11 @@ function movesToPlace(type: PieceChar, targetRot: number, targetCol: number): st
 }
 
 let jsBoard: Board = emptyBoard()
-let currentPiece: PieceChar = 'I'
-let nextQueue: PieceChar[] = []
+let currentPiece: PieceType = 'I'
+let nextQueue: PieceType[] = []
 let wasmBot: any = null
 
-async function tryLoadWasm(piece: PieceChar, next: PieceChar[]) {
+async function tryLoadWasm(piece: PieceType, next: PieceType[]) {
   try {
     // @ts-ignore
     const mod = await import(/* webpackIgnore: true */ '/wasm/cold-clear.js')
@@ -338,8 +313,8 @@ self.addEventListener('message', async (e: MessageEvent<InMsg>) => {
       const { col, rot } = nextQueue[0]
         ? bestMove2(jsBoard, currentPiece, nextQueue[0])
         : bestMove(jsBoard, currentPiece)
-      const actions = movesToPlace(currentPiece, rot, col)
-      const minos = MINOS[currentPiece]?.[rot] ?? []
+      const actions = movesToPlace(jsBoard, currentPiece, rot, col)
+      const minos = PIECES[currentPiece]?.[rot] ?? []
       const row = drop(jsBoard, minos, col)
       if (fits(jsBoard, minos, row, col)) {
         jsBoard = place(jsBoard, minos, row, col).board
