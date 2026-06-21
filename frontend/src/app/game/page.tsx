@@ -22,9 +22,21 @@ function emptyTally(): Tally { return { sent: 0, received: 0, cancelled: 0 } }
 
 type Phase = 'config' | 'playing'
 
+// Difficulty only adjusts bot think-time (placement speed) — attack/garbage
+// logic is identical across tiers. Higher ms = slower placement = easier.
+type Difficulty = '강함' | '많이강함' | '아주많이강함'
+const DIFFICULTIES: Difficulty[] = ['강함', '많이강함', '아주많이강함']
+const DEFAULT_DIFFICULTY: Difficulty = '많이강함'
+const THINK_MS_BY_DIFFICULTY: Record<Difficulty, number> = {
+  '강함': 350,
+  '많이강함': 200,
+  '아주많이강함': 100,
+}
+
 export default function GamePage() {
   const [phase, setPhase] = useState<Phase>('config')
   const [botCount, setBotCount] = useState<1 | 2 | 3>(1)
+  const [difficulty, setDifficulty] = useState<Difficulty>(DEFAULT_DIFFICULTY)
   const [tick, setTick] = useState(0)
   const [gameOver, setGameOver] = useState(false)
   const [won, setWon] = useState(false)
@@ -259,6 +271,29 @@ export default function GamePage() {
             ))}
           </div>
         </div>
+        <div className="flex flex-col items-center gap-3">
+          <p className="text-white/50 text-sm">난이도</p>
+          <div className="flex gap-3">
+            {DIFFICULTIES.map(d => (
+              <button
+                key={d}
+                onClick={() => setDifficulty(d)}
+                className={`relative px-4 h-12 rounded-lg text-sm font-bold border transition ${
+                  difficulty === d
+                    ? 'bg-indigo-600 border-indigo-500 text-white'
+                    : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'
+                }`}
+              >
+                {d}
+                {d === DEFAULT_DIFFICULTY && (
+                  <span className="absolute -top-2 -right-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-500 text-black font-semibold">
+                    default
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
         <button
           onClick={startGame}
           className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-lg font-semibold"
@@ -296,6 +331,7 @@ export default function GamePage() {
                 cellSize={BOT_CELL[botCount]}
                 running={running}
                 label={`Bot ${i + 1}`}
+                thinkMs={THINK_MS_BY_DIFFICULTY[difficulty]}
                 onTopOut={handleBotTopOut}
                 onAttack={(lines, cancelled) => handleBotAttack(i, lines, cancelled)}
               />

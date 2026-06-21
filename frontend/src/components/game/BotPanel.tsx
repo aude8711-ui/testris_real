@@ -7,7 +7,7 @@ import { useBot } from '@/lib/workers/useBot'
 import { GameBoard } from './GameBoard'
 
 const GRAVITY_MS = 800
-const BOT_THINK_MS = 100
+const DEFAULT_BOT_THINK_MS = 100
 
 interface Props {
   engine: GameEngine
@@ -16,9 +16,10 @@ interface Props {
   label: string
   onTopOut: () => void
   onAttack?: (lines: number, cancelled: number) => void
+  thinkMs?: number // per-action tick interval — higher = slower piece placement = easier
 }
 
-export function BotPanel({ engine, cellSize, running, label, onTopOut, onAttack }: Props) {
+export function BotPanel({ engine, cellSize, running, label, onTopOut, onAttack, thinkMs = DEFAULT_BOT_THINK_MS }: Props) {
   const [tick, setTick] = useState(0)
   // engineRef is initialized from the engine prop — stable for this component's lifetime
   const engineRef = useRef<GameEngine>(engine)
@@ -104,9 +105,9 @@ export function BotPanel({ engine, cellSize, running, label, onTopOut, onAttack 
           )
         }
       }
-    }, BOT_THINK_MS)
+    }, thinkMs)
     return () => clearInterval(id)
-  }, [running, addPiece, requestMove])
+  }, [running, addPiece, requestMove, thinkMs])
 
   const eng = engineRef.current
 
