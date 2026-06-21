@@ -209,9 +209,11 @@ export class GameEngine {
     const allClear = board.slice(0, VISIBLE_ROWS).every(row => row.every(c => c === null))
     const isB2bMove = cleared.length === 4 || (tSpin !== 'none' && cleared.length > 0)
     const prevB2b = this.state.b2b
-    const b2bBroken = !isB2bMove && cleared.length > 0 && prevB2b > 0
+    const b2bBroken = !allClear && !isB2bMove && cleared.length > 0 && prevB2b > 0
     const surge = b2bBroken && prevB2b >= 4 ? prevB2b : 0
-    if (isB2bMove) {
+    if (allClear) {
+      this.state.b2b = prevB2b + 2
+    } else if (isB2bMove) {
       this.state.b2b = prevB2b + 1
     } else if (cleared.length > 0) {
       this.state.b2b = 0
